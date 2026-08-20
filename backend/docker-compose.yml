@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: money_manager
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Published to localhost only, for local psql/debugging during Phase 2
+      # dev. Phase 4 (production) drops this — Postgres stays internal-only,
+      # reachable solely from the api container.
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/money_manager
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      PORT: 3000
+    ports:
+      # Published directly for Phase 2 local dev/testing. Phase 4 replaces
+      # this with a Caddy service as the only container touching the host
+      # network, reverse-proxying to api over the internal network.
+      - "3000:3000"
+
+volumes:
+  pgdata:
