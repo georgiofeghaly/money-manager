@@ -22,7 +22,10 @@ class DirtyRows {
   final List<Budget> budgets;
 
   int get total =>
-      accounts.length + categories.length + transactions.length + budgets.length;
+      accounts.length +
+      categories.length +
+      transactions.length +
+      budgets.length;
 }
 
 /// Finds locally-dirty rows for [SyncEngine] to push, and applies push/pull
@@ -39,18 +42,18 @@ class Outbox {
   /// resolves them (features/sync_conflicts/), at which point resolution
   /// flips them back to `'pending'` with a corrected version.
   Future<DirtyRows> collectDirtyRows() async {
-    final accounts = await (_db.select(_db.accounts)
-          ..where((a) => a.syncStatus.equals('pending')))
-        .get();
-    final categories = await (_db.select(_db.categories)
-          ..where((c) => c.syncStatus.equals('pending')))
-        .get();
-    final transactions = await (_db.select(_db.transactions)
-          ..where((t) => t.syncStatus.equals('pending')))
-        .get();
-    final budgets = await (_db.select(_db.budgets)
-          ..where((b) => b.syncStatus.equals('pending')))
-        .get();
+    final accounts = await (_db.select(
+      _db.accounts,
+    )..where((a) => a.syncStatus.equals('pending'))).get();
+    final categories = await (_db.select(
+      _db.categories,
+    )..where((c) => c.syncStatus.equals('pending'))).get();
+    final transactions = await (_db.select(
+      _db.transactions,
+    )..where((t) => t.syncStatus.equals('pending'))).get();
+    final budgets = await (_db.select(
+      _db.budgets,
+    )..where((b) => b.syncStatus.equals('pending'))).get();
     return DirtyRows(
       accounts: accounts,
       categories: categories,
@@ -65,8 +68,12 @@ class Outbox {
   // locally, only the sync-metadata columns need to reflect what the server
   // recorded.
 
-  Future<void> markAccountSynced(String id,
-      {required int version, required DateTime updatedAt, String? originDeviceId}) {
+  Future<void> markAccountSynced(
+    String id, {
+    required int version,
+    required DateTime updatedAt,
+    String? originDeviceId,
+  }) {
     return (_db.update(_db.accounts)..where((a) => a.id.equals(id))).write(
       AccountsCompanion(
         version: Value(version),
@@ -77,8 +84,12 @@ class Outbox {
     );
   }
 
-  Future<void> markCategorySynced(String id,
-      {required int version, required DateTime updatedAt, String? originDeviceId}) {
+  Future<void> markCategorySynced(
+    String id, {
+    required int version,
+    required DateTime updatedAt,
+    String? originDeviceId,
+  }) {
     return (_db.update(_db.categories)..where((c) => c.id.equals(id))).write(
       CategoriesCompanion(
         version: Value(version),
@@ -89,8 +100,12 @@ class Outbox {
     );
   }
 
-  Future<void> markTransactionSynced(String id,
-      {required int version, required DateTime updatedAt, String? originDeviceId}) {
+  Future<void> markTransactionSynced(
+    String id, {
+    required int version,
+    required DateTime updatedAt,
+    String? originDeviceId,
+  }) {
     return (_db.update(_db.transactions)..where((t) => t.id.equals(id))).write(
       TransactionsCompanion(
         version: Value(version),
@@ -101,8 +116,12 @@ class Outbox {
     );
   }
 
-  Future<void> markBudgetSynced(String id,
-      {required int version, required DateTime updatedAt, String? originDeviceId}) {
+  Future<void> markBudgetSynced(
+    String id, {
+    required int version,
+    required DateTime updatedAt,
+    String? originDeviceId,
+  }) {
     return (_db.update(_db.budgets)..where((b) => b.id.equals(id))).write(
       BudgetsCompanion(
         version: Value(version),
@@ -146,7 +165,9 @@ class Outbox {
   // replaces the whole row keyed by primary key `id`.
 
   Future<void> upsertAccountFromServer(Map<String, dynamic> json) {
-    return _db.into(_db.accounts).insertOnConflictUpdate(
+    return _db
+        .into(_db.accounts)
+        .insertOnConflictUpdate(
           AccountsCompanion.insert(
             id: json['id'] as String,
             userId: Value(json['userId'] as String),
@@ -164,7 +185,9 @@ class Outbox {
   }
 
   Future<void> upsertCategoryFromServer(Map<String, dynamic> json) {
-    return _db.into(_db.categories).insertOnConflictUpdate(
+    return _db
+        .into(_db.categories)
+        .insertOnConflictUpdate(
           CategoriesCompanion.insert(
             id: json['id'] as String,
             userId: Value(json['userId'] as String?),
@@ -172,7 +195,9 @@ class Outbox {
             name: json['name'] as String,
             icon: Value(json['icon'] as String?),
             color: Value(json['color'] as int?),
-            isSeed: const Value(false), // server never sends seed rows to a client
+            isSeed: const Value(
+              false,
+            ), // server never sends seed rows to a client
             updatedAt: DateTime.parse(json['updatedAt'] as String),
             version: Value(json['version'] as int),
             originDeviceId: Value(json['originDeviceId'] as String?),
@@ -183,7 +208,9 @@ class Outbox {
   }
 
   Future<void> upsertTransactionFromServer(Map<String, dynamic> json) {
-    return _db.into(_db.transactions).insertOnConflictUpdate(
+    return _db
+        .into(_db.transactions)
+        .insertOnConflictUpdate(
           TransactionsCompanion.insert(
             id: json['id'] as String,
             userId: Value(json['userId'] as String),
@@ -204,7 +231,9 @@ class Outbox {
   }
 
   Future<void> upsertBudgetFromServer(Map<String, dynamic> json) {
-    return _db.into(_db.budgets).insertOnConflictUpdate(
+    return _db
+        .into(_db.budgets)
+        .insertOnConflictUpdate(
           BudgetsCompanion.insert(
             id: json['id'] as String,
             userId: Value(json['userId'] as String),
@@ -222,6 +251,55 @@ class Outbox {
 
   // ---- conflicts ------------------------------------------------------------
 
+  // ---- rejections -----------------------------------------------------------
+  //
+  // A hard failure — the server refused the row outright, not a version
+  // mismatch — surfaced by SyncEngine after a push. Unlike a conflict, the
+  // row's `syncStatus` stays `'pending'`, so it keeps being retried on every
+  // future push automatically (if the underlying cause gets fixed server
+  // side, it self-heals without the user doing anything); this table exists
+  // purely so the UI can show what's stuck and why in the meantime.
+
+  Future<void> writeRejection(
+    SyncTableName table,
+    String rowId,
+    String reason,
+    Map<String, dynamic> localJson,
+  ) {
+    return _db
+        .into(_db.syncRejections)
+        .insertOnConflictUpdate(
+          SyncRejectionsCompanion.insert(
+            id: '${table.name}:$rowId',
+            syncTableName: table.name,
+            rowId: rowId,
+            reason: reason,
+            localRowJson: jsonEncode(localJson),
+            detectedAt: DateTime.now(),
+          ),
+        );
+  }
+
+  Future<void> clearRejection(SyncTableName table, String rowId) {
+    return (_db.delete(
+      _db.syncRejections,
+    )..where((r) => r.id.equals('${table.name}:$rowId'))).go();
+  }
+
+  Stream<int> watchRejectionCount() {
+    final query = _db.selectOnly(_db.syncRejections)
+      ..addColumns([_db.syncRejections.id.count()]);
+    return query.watchSingle().map(
+      (row) => row.read(_db.syncRejections.id.count()) ?? 0,
+    );
+  }
+
+  Stream<List<SyncRejection>> watchRejections() {
+    return (_db.select(
+      _db.syncRejections,
+    )..orderBy([(r) => OrderingTerm.desc(r.detectedAt)])).watch();
+  }
+
   /// Records a conflict for the resolution UI (features/sync_conflicts/) and
   /// flips the local row's status to `'conflict'` so [collectDirtyRows]
   /// stops re-pushing it until the user resolves it.
@@ -231,7 +309,9 @@ class Outbox {
     Map<String, dynamic> localJson,
     Map<String, dynamic> serverJson,
   ) async {
-    await _db.into(_db.syncConflicts).insert(
+    await _db
+        .into(_db.syncConflicts)
+        .insert(
           SyncConflictsCompanion.insert(
             id: _uuid.v4(),
             syncTableName: table.name,
@@ -253,8 +333,9 @@ class Outbox {
         await (_db.update(_db.transactions)..where((t) => t.id.equals(rowId)))
             .write(const TransactionsCompanion(syncStatus: Value('conflict')));
       case SyncTableName.budgets:
-        await (_db.update(_db.budgets)..where((b) => b.id.equals(rowId)))
-            .write(const BudgetsCompanion(syncStatus: Value('conflict')));
+        await (_db.update(_db.budgets)..where((b) => b.id.equals(rowId))).write(
+          const BudgetsCompanion(syncStatus: Value('conflict')),
+        );
     }
   }
 
@@ -262,7 +343,9 @@ class Outbox {
     final query = _db.selectOnly(_db.syncConflicts)
       ..addColumns([_db.syncConflicts.id.count()])
       ..where(_db.syncConflicts.resolvedAt.isNull());
-    return query.watchSingle().map((row) => row.read(_db.syncConflicts.id.count()) ?? 0);
+    return query.watchSingle().map(
+      (row) => row.read(_db.syncConflicts.id.count()) ?? 0,
+    );
   }
 
   Stream<List<SyncConflict>> watchOpenConflicts() {
@@ -288,11 +371,15 @@ class Outbox {
     final now = DateTime.now();
     switch (table) {
       case SyncTableName.accounts:
-        await (_db.update(_db.accounts)..where((a) => a.id.equals(rowId))).write(
+        await (_db.update(
+          _db.accounts,
+        )..where((a) => a.id.equals(rowId))).write(
           AccountsCompanion(
             name: Value(chosenJson['name'] as String),
             type: Value(chosenJson['type'] as String),
-            startingBalance: Value((chosenJson['startingBalance'] as num).toDouble()),
+            startingBalance: Value(
+              (chosenJson['startingBalance'] as num).toDouble(),
+            ),
             archivedAt: Value(_parseNullableDate(chosenJson['archivedAt'])),
             deletedAt: Value(_parseNullableDate(chosenJson['deletedAt'])),
             version: Value(version),
@@ -301,7 +388,9 @@ class Outbox {
           ),
         );
       case SyncTableName.categories:
-        await (_db.update(_db.categories)..where((c) => c.id.equals(rowId))).write(
+        await (_db.update(
+          _db.categories,
+        )..where((c) => c.id.equals(rowId))).write(
           CategoriesCompanion(
             name: Value(chosenJson['name'] as String),
             icon: Value(chosenJson['icon'] as String?),
@@ -313,13 +402,19 @@ class Outbox {
           ),
         );
       case SyncTableName.transactions:
-        await (_db.update(_db.transactions)..where((t) => t.id.equals(rowId))).write(
+        await (_db.update(
+          _db.transactions,
+        )..where((t) => t.id.equals(rowId))).write(
           TransactionsCompanion(
             type: Value(chosenJson['type'] as String),
             amount: Value((chosenJson['amount'] as num).toDouble()),
-            occurredAt: Value(DateTime.parse(chosenJson['occurredAt'] as String)),
+            occurredAt: Value(
+              DateTime.parse(chosenJson['occurredAt'] as String),
+            ),
             accountId: Value(chosenJson['accountId'] as String),
-            transferToAccountId: Value(chosenJson['transferToAccountId'] as String?),
+            transferToAccountId: Value(
+              chosenJson['transferToAccountId'] as String?,
+            ),
             categoryId: Value(chosenJson['categoryId'] as String?),
             note: Value(chosenJson['note'] as String?),
             deletedAt: Value(_parseNullableDate(chosenJson['deletedAt'])),
@@ -332,7 +427,9 @@ class Outbox {
         await (_db.update(_db.budgets)..where((b) => b.id.equals(rowId))).write(
           BudgetsCompanion(
             categoryId: Value(chosenJson['categoryId'] as String),
-            periodMonth: Value(DateTime.parse(chosenJson['periodMonth'] as String)),
+            periodMonth: Value(
+              DateTime.parse(chosenJson['periodMonth'] as String),
+            ),
             limitAmount: Value((chosenJson['limitAmount'] as num).toDouble()),
             deletedAt: Value(_parseNullableDate(chosenJson['deletedAt'])),
             version: Value(version),
@@ -344,7 +441,8 @@ class Outbox {
   }
 
   Future<void> markConflictResolved(String conflictId) {
-    return (_db.update(_db.syncConflicts)..where((c) => c.id.equals(conflictId)))
+    return (_db.update(_db.syncConflicts)
+          ..where((c) => c.id.equals(conflictId)))
         .write(SyncConflictsCompanion(resolvedAt: Value(DateTime.now())));
   }
 }

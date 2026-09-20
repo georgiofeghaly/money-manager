@@ -3354,6 +3354,424 @@ class SyncConflictsCompanion extends UpdateCompanion<SyncConflict> {
   }
 }
 
+class $SyncRejectionsTable extends SyncRejections
+    with TableInfo<$SyncRejectionsTable, SyncRejection> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncRejectionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _syncTableNameMeta = const VerificationMeta(
+    'syncTableName',
+  );
+  @override
+  late final GeneratedColumn<String> syncTableName = GeneratedColumn<String>(
+    'sync_table_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rowIdMeta = const VerificationMeta('rowId');
+  @override
+  late final GeneratedColumn<String> rowId = GeneratedColumn<String>(
+    'row_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localRowJsonMeta = const VerificationMeta(
+    'localRowJson',
+  );
+  @override
+  late final GeneratedColumn<String> localRowJson = GeneratedColumn<String>(
+    'local_row_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detectedAtMeta = const VerificationMeta(
+    'detectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detectedAt = GeneratedColumn<DateTime>(
+    'detected_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    syncTableName,
+    rowId,
+    reason,
+    localRowJson,
+    detectedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_rejections';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncRejection> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('sync_table_name')) {
+      context.handle(
+        _syncTableNameMeta,
+        syncTableName.isAcceptableOrUnknown(
+          data['sync_table_name']!,
+          _syncTableNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_syncTableNameMeta);
+    }
+    if (data.containsKey('row_id')) {
+      context.handle(
+        _rowIdMeta,
+        rowId.isAcceptableOrUnknown(data['row_id']!, _rowIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowIdMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('local_row_json')) {
+      context.handle(
+        _localRowJsonMeta,
+        localRowJson.isAcceptableOrUnknown(
+          data['local_row_json']!,
+          _localRowJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localRowJsonMeta);
+    }
+    if (data.containsKey('detected_at')) {
+      context.handle(
+        _detectedAtMeta,
+        detectedAt.isAcceptableOrUnknown(data['detected_at']!, _detectedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_detectedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncRejection map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncRejection(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      syncTableName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_table_name'],
+      )!,
+      rowId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}row_id'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      localRowJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_row_json'],
+      )!,
+      detectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detected_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncRejectionsTable createAlias(String alias) {
+    return $SyncRejectionsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncRejection extends DataClass implements Insertable<SyncRejection> {
+  final String id;
+  final String syncTableName;
+  final String rowId;
+  final String reason;
+  final String localRowJson;
+  final DateTime detectedAt;
+  const SyncRejection({
+    required this.id,
+    required this.syncTableName,
+    required this.rowId,
+    required this.reason,
+    required this.localRowJson,
+    required this.detectedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['sync_table_name'] = Variable<String>(syncTableName);
+    map['row_id'] = Variable<String>(rowId);
+    map['reason'] = Variable<String>(reason);
+    map['local_row_json'] = Variable<String>(localRowJson);
+    map['detected_at'] = Variable<DateTime>(detectedAt);
+    return map;
+  }
+
+  SyncRejectionsCompanion toCompanion(bool nullToAbsent) {
+    return SyncRejectionsCompanion(
+      id: Value(id),
+      syncTableName: Value(syncTableName),
+      rowId: Value(rowId),
+      reason: Value(reason),
+      localRowJson: Value(localRowJson),
+      detectedAt: Value(detectedAt),
+    );
+  }
+
+  factory SyncRejection.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncRejection(
+      id: serializer.fromJson<String>(json['id']),
+      syncTableName: serializer.fromJson<String>(json['syncTableName']),
+      rowId: serializer.fromJson<String>(json['rowId']),
+      reason: serializer.fromJson<String>(json['reason']),
+      localRowJson: serializer.fromJson<String>(json['localRowJson']),
+      detectedAt: serializer.fromJson<DateTime>(json['detectedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'syncTableName': serializer.toJson<String>(syncTableName),
+      'rowId': serializer.toJson<String>(rowId),
+      'reason': serializer.toJson<String>(reason),
+      'localRowJson': serializer.toJson<String>(localRowJson),
+      'detectedAt': serializer.toJson<DateTime>(detectedAt),
+    };
+  }
+
+  SyncRejection copyWith({
+    String? id,
+    String? syncTableName,
+    String? rowId,
+    String? reason,
+    String? localRowJson,
+    DateTime? detectedAt,
+  }) => SyncRejection(
+    id: id ?? this.id,
+    syncTableName: syncTableName ?? this.syncTableName,
+    rowId: rowId ?? this.rowId,
+    reason: reason ?? this.reason,
+    localRowJson: localRowJson ?? this.localRowJson,
+    detectedAt: detectedAt ?? this.detectedAt,
+  );
+  SyncRejection copyWithCompanion(SyncRejectionsCompanion data) {
+    return SyncRejection(
+      id: data.id.present ? data.id.value : this.id,
+      syncTableName: data.syncTableName.present
+          ? data.syncTableName.value
+          : this.syncTableName,
+      rowId: data.rowId.present ? data.rowId.value : this.rowId,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      localRowJson: data.localRowJson.present
+          ? data.localRowJson.value
+          : this.localRowJson,
+      detectedAt: data.detectedAt.present
+          ? data.detectedAt.value
+          : this.detectedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncRejection(')
+          ..write('id: $id, ')
+          ..write('syncTableName: $syncTableName, ')
+          ..write('rowId: $rowId, ')
+          ..write('reason: $reason, ')
+          ..write('localRowJson: $localRowJson, ')
+          ..write('detectedAt: $detectedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, syncTableName, rowId, reason, localRowJson, detectedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncRejection &&
+          other.id == this.id &&
+          other.syncTableName == this.syncTableName &&
+          other.rowId == this.rowId &&
+          other.reason == this.reason &&
+          other.localRowJson == this.localRowJson &&
+          other.detectedAt == this.detectedAt);
+}
+
+class SyncRejectionsCompanion extends UpdateCompanion<SyncRejection> {
+  final Value<String> id;
+  final Value<String> syncTableName;
+  final Value<String> rowId;
+  final Value<String> reason;
+  final Value<String> localRowJson;
+  final Value<DateTime> detectedAt;
+  final Value<int> rowid;
+  const SyncRejectionsCompanion({
+    this.id = const Value.absent(),
+    this.syncTableName = const Value.absent(),
+    this.rowId = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.localRowJson = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncRejectionsCompanion.insert({
+    required String id,
+    required String syncTableName,
+    required String rowId,
+    required String reason,
+    required String localRowJson,
+    required DateTime detectedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       syncTableName = Value(syncTableName),
+       rowId = Value(rowId),
+       reason = Value(reason),
+       localRowJson = Value(localRowJson),
+       detectedAt = Value(detectedAt);
+  static Insertable<SyncRejection> custom({
+    Expression<String>? id,
+    Expression<String>? syncTableName,
+    Expression<String>? rowId,
+    Expression<String>? reason,
+    Expression<String>? localRowJson,
+    Expression<DateTime>? detectedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (syncTableName != null) 'sync_table_name': syncTableName,
+      if (rowId != null) 'row_id': rowId,
+      if (reason != null) 'reason': reason,
+      if (localRowJson != null) 'local_row_json': localRowJson,
+      if (detectedAt != null) 'detected_at': detectedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncRejectionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? syncTableName,
+    Value<String>? rowId,
+    Value<String>? reason,
+    Value<String>? localRowJson,
+    Value<DateTime>? detectedAt,
+    Value<int>? rowid,
+  }) {
+    return SyncRejectionsCompanion(
+      id: id ?? this.id,
+      syncTableName: syncTableName ?? this.syncTableName,
+      rowId: rowId ?? this.rowId,
+      reason: reason ?? this.reason,
+      localRowJson: localRowJson ?? this.localRowJson,
+      detectedAt: detectedAt ?? this.detectedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (syncTableName.present) {
+      map['sync_table_name'] = Variable<String>(syncTableName.value);
+    }
+    if (rowId.present) {
+      map['row_id'] = Variable<String>(rowId.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (localRowJson.present) {
+      map['local_row_json'] = Variable<String>(localRowJson.value);
+    }
+    if (detectedAt.present) {
+      map['detected_at'] = Variable<DateTime>(detectedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncRejectionsCompanion(')
+          ..write('id: $id, ')
+          ..write('syncTableName: $syncTableName, ')
+          ..write('rowId: $rowId, ')
+          ..write('reason: $reason, ')
+          ..write('localRowJson: $localRowJson, ')
+          ..write('detectedAt: $detectedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3362,6 +3780,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TransactionsTable transactions = $TransactionsTable(this);
   late final $BudgetsTable budgets = $BudgetsTable(this);
   late final $SyncConflictsTable syncConflicts = $SyncConflictsTable(this);
+  late final $SyncRejectionsTable syncRejections = $SyncRejectionsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3372,6 +3791,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transactions,
     budgets,
     syncConflicts,
+    syncRejections,
   ];
 }
 
@@ -5600,6 +6020,233 @@ typedef $$SyncConflictsTableProcessedTableManager =
       SyncConflict,
       PrefetchHooks Function()
     >;
+typedef $$SyncRejectionsTableCreateCompanionBuilder =
+    SyncRejectionsCompanion Function({
+      required String id,
+      required String syncTableName,
+      required String rowId,
+      required String reason,
+      required String localRowJson,
+      required DateTime detectedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncRejectionsTableUpdateCompanionBuilder =
+    SyncRejectionsCompanion Function({
+      Value<String> id,
+      Value<String> syncTableName,
+      Value<String> rowId,
+      Value<String> reason,
+      Value<String> localRowJson,
+      Value<DateTime> detectedAt,
+      Value<int> rowid,
+    });
+
+class $$SyncRejectionsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncRejectionsTable> {
+  $$SyncRejectionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncTableName => $composableBuilder(
+    column: $table.syncTableName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rowId => $composableBuilder(
+    column: $table.rowId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localRowJson => $composableBuilder(
+    column: $table.localRowJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncRejectionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncRejectionsTable> {
+  $$SyncRejectionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncTableName => $composableBuilder(
+    column: $table.syncTableName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rowId => $composableBuilder(
+    column: $table.rowId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localRowJson => $composableBuilder(
+    column: $table.localRowJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncRejectionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncRejectionsTable> {
+  $$SyncRejectionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get syncTableName => $composableBuilder(
+    column: $table.syncTableName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rowId =>
+      $composableBuilder(column: $table.rowId, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get localRowJson => $composableBuilder(
+    column: $table.localRowJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncRejectionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncRejectionsTable,
+          SyncRejection,
+          $$SyncRejectionsTableFilterComposer,
+          $$SyncRejectionsTableOrderingComposer,
+          $$SyncRejectionsTableAnnotationComposer,
+          $$SyncRejectionsTableCreateCompanionBuilder,
+          $$SyncRejectionsTableUpdateCompanionBuilder,
+          (
+            SyncRejection,
+            BaseReferences<_$AppDatabase, $SyncRejectionsTable, SyncRejection>,
+          ),
+          SyncRejection,
+          PrefetchHooks Function()
+        > {
+  $$SyncRejectionsTableTableManager(
+    _$AppDatabase db,
+    $SyncRejectionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncRejectionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncRejectionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncRejectionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> syncTableName = const Value.absent(),
+                Value<String> rowId = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<String> localRowJson = const Value.absent(),
+                Value<DateTime> detectedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncRejectionsCompanion(
+                id: id,
+                syncTableName: syncTableName,
+                rowId: rowId,
+                reason: reason,
+                localRowJson: localRowJson,
+                detectedAt: detectedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String syncTableName,
+                required String rowId,
+                required String reason,
+                required String localRowJson,
+                required DateTime detectedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncRejectionsCompanion.insert(
+                id: id,
+                syncTableName: syncTableName,
+                rowId: rowId,
+                reason: reason,
+                localRowJson: localRowJson,
+                detectedAt: detectedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncRejectionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncRejectionsTable,
+      SyncRejection,
+      $$SyncRejectionsTableFilterComposer,
+      $$SyncRejectionsTableOrderingComposer,
+      $$SyncRejectionsTableAnnotationComposer,
+      $$SyncRejectionsTableCreateCompanionBuilder,
+      $$SyncRejectionsTableUpdateCompanionBuilder,
+      (
+        SyncRejection,
+        BaseReferences<_$AppDatabase, $SyncRejectionsTable, SyncRejection>,
+      ),
+      SyncRejection,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5614,4 +6261,6 @@ class $AppDatabaseManager {
       $$BudgetsTableTableManager(_db, _db.budgets);
   $$SyncConflictsTableTableManager get syncConflicts =>
       $$SyncConflictsTableTableManager(_db, _db.syncConflicts);
+  $$SyncRejectionsTableTableManager get syncRejections =>
+      $$SyncRejectionsTableTableManager(_db, _db.syncRejections);
 }

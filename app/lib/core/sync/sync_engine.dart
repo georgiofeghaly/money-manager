@@ -22,106 +22,212 @@ class SyncEngine {
     onProgress?.call(const SyncProgress(phase: SyncPhase.syncing));
 
     try {
-      await _push(deviceId, onProgress);
+      final rejectedCount = await _push(deviceId, onProgress);
       await _pull(onProgress);
 
       final now = DateTime.now();
       await _settings.writeLastSyncedAt(now);
-      await _settings.writeLastSyncStatus('ok');
-      onProgress?.call(SyncProgress(phase: SyncPhase.idle, lastSyncedAt: now));
+      if (rejectedCount > 0) {
+        // Not an ApiException — the push itself succeeded, but the server
+        // refused some rows outright. Surfaced in full via SyncRejections
+        // (see writeRejection below); this just flags the overall status so
+        // it doesn't read as a clean "Synced" when it wasn't.
+        await _settings.writeLastSyncStatus('error');
+        onProgress?.call(
+          SyncProgress(
+            phase: SyncPhase.error,
+            lastSyncedAt: now,
+            lastError: rejectedCount == 1
+                ? '1 item failed to sync'
+                : '$rejectedCount items failed to sync',
+          ),
+        );
+      } else {
+        await _settings.writeLastSyncStatus('ok');
+        onProgress?.call(
+          SyncProgress(phase: SyncPhase.idle, lastSyncedAt: now),
+        );
+      }
     } on ApiException catch (e) {
       await _settings.writeLastSyncStatus('error');
-      onProgress?.call(SyncProgress(phase: SyncPhase.error, lastError: e.message));
+      onProgress?.call(
+        SyncProgress(phase: SyncPhase.error, lastError: e.message),
+      );
       rethrow;
     }
   }
 
   // ---- push -----------------------------------------------------------------
 
-  Future<void> _push(String deviceId, ProgressCallback? onProgress) async {
+  /// Returns the number of rows the server rejected outright (see
+  /// SyncRejections) so [runSync] can reflect that in the overall status.
+  Future<int> _push(String deviceId, ProgressCallback? onProgress) async {
     final dirty = await _outbox.collectDirtyRows();
-    if (dirty.total == 0) return;
+    if (dirty.total == 0) return 0;
 
     var done = 0;
     void tick() => onProgress?.call(
-          SyncProgress(phase: SyncPhase.syncing, current: ++done, total: dirty.total),
-        );
-    onProgress?.call(SyncProgress(phase: SyncPhase.syncing, current: 0, total: dirty.total));
+      SyncProgress(
+        phase: SyncPhase.syncing,
+        current: ++done,
+        total: dirty.total,
+      ),
+    );
+    onProgress?.call(
+      SyncProgress(phase: SyncPhase.syncing, current: 0, total: dirty.total),
+    );
 
     final response = await _api.pushSync(
       deviceId: deviceId,
       tables: {
         'accounts': [for (final row in dirty.accounts) _accountToPushJson(row)],
-        'categories': [for (final row in dirty.categories) _categoryToPushJson(row)],
-        'transactions': [for (final row in dirty.transactions) _transactionToPushJson(row)],
+        'categories': [
+          for (final row in dirty.categories) _categoryToPushJson(row),
+        ],
+        'transactions': [
+          for (final row in dirty.transactions) _transactionToPushJson(row),
+        ],
         'budgets': [for (final row in dirty.budgets) _budgetToPushJson(row)],
       },
     );
 
     final accepted = response['accepted'] as Map<String, dynamic>;
     final conflicts = response['conflicts'] as Map<String, dynamic>;
+    // Older servers (before this was added) won't send this field.
+    final rejected = response['rejected'] as Map<String, dynamic>? ?? const {};
 
     for (final json in _list(accepted['accounts'])) {
+      final id = json['id'] as String;
       await _outbox.markAccountSynced(
-        json['id'] as String,
+        id,
         version: json['version'] as int,
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         originDeviceId: json['originDeviceId'] as String?,
       );
+      await _outbox.clearRejection(SyncTableName.accounts, id);
       tick();
     }
     for (final json in _list(accepted['categories'])) {
+      final id = json['id'] as String;
       await _outbox.markCategorySynced(
-        json['id'] as String,
+        id,
         version: json['version'] as int,
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         originDeviceId: json['originDeviceId'] as String?,
       );
+      await _outbox.clearRejection(SyncTableName.categories, id);
       tick();
     }
     for (final json in _list(accepted['transactions'])) {
+      final id = json['id'] as String;
       await _outbox.markTransactionSynced(
-        json['id'] as String,
+        id,
         version: json['version'] as int,
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         originDeviceId: json['originDeviceId'] as String?,
       );
+      await _outbox.clearRejection(SyncTableName.transactions, id);
       tick();
     }
     for (final json in _list(accepted['budgets'])) {
+      final id = json['id'] as String;
       await _outbox.markBudgetSynced(
-        json['id'] as String,
+        id,
         version: json['version'] as int,
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         originDeviceId: json['originDeviceId'] as String?,
       );
+      await _outbox.clearRejection(SyncTableName.budgets, id);
       tick();
     }
 
     for (final json in _list(conflicts['accounts'])) {
       final local = dirty.accounts.firstWhere((r) => r.id == json['id']);
       await _outbox.writeConflict(
-          SyncTableName.accounts, local.id, _accountToFullJson(local), json);
+        SyncTableName.accounts,
+        local.id,
+        _accountToFullJson(local),
+        json,
+      );
       tick();
     }
     for (final json in _list(conflicts['categories'])) {
       final local = dirty.categories.firstWhere((r) => r.id == json['id']);
       await _outbox.writeConflict(
-          SyncTableName.categories, local.id, _categoryToFullJson(local), json);
+        SyncTableName.categories,
+        local.id,
+        _categoryToFullJson(local),
+        json,
+      );
       tick();
     }
     for (final json in _list(conflicts['transactions'])) {
       final local = dirty.transactions.firstWhere((r) => r.id == json['id']);
       await _outbox.writeConflict(
-          SyncTableName.transactions, local.id, _transactionToFullJson(local), json);
+        SyncTableName.transactions,
+        local.id,
+        _transactionToFullJson(local),
+        json,
+      );
       tick();
     }
     for (final json in _list(conflicts['budgets'])) {
       final local = dirty.budgets.firstWhere((r) => r.id == json['id']);
       await _outbox.writeConflict(
-          SyncTableName.budgets, local.id, _budgetToFullJson(local), json);
+        SyncTableName.budgets,
+        local.id,
+        _budgetToFullJson(local),
+        json,
+      );
       tick();
     }
+
+    var rejectedCount = 0;
+    for (final json in _list(rejected['accounts'])) {
+      final local = dirty.accounts.firstWhere((r) => r.id == json['id']);
+      await _outbox.writeRejection(
+        SyncTableName.accounts,
+        local.id,
+        json['reason'] as String,
+        _accountToFullJson(local),
+      );
+      rejectedCount++;
+      tick();
+    }
+    for (final json in _list(rejected['categories'])) {
+      final local = dirty.categories.firstWhere((r) => r.id == json['id']);
+      await _outbox.writeRejection(
+        SyncTableName.categories,
+        local.id,
+        json['reason'] as String,
+        _categoryToFullJson(local),
+      );
+      rejectedCount++;
+      tick();
+    }
+    for (final json in _list(rejected['transactions'])) {
+      final local = dirty.transactions.firstWhere((r) => r.id == json['id']);
+      await _outbox.writeRejection(
+        SyncTableName.transactions,
+        local.id,
+        json['reason'] as String,
+        _transactionToFullJson(local),
+      );
+      rejectedCount++;
+      tick();
+    }
+    for (final json in _list(rejected['budgets'])) {
+      final local = dirty.budgets.firstWhere((r) => r.id == json['id']);
+      await _outbox.writeRejection(
+        SyncTableName.budgets,
+        local.id,
+        json['reason'] as String,
+        _budgetToFullJson(local),
+      );
+      rejectedCount++;
+      tick();
+    }
+    return rejectedCount;
   }
 
   // ---- pull -----------------------------------------------------------------
@@ -140,13 +246,18 @@ class SyncEngine {
       final budgets = _list(tables['budgets']);
 
       final total =
-          accounts.length + categories.length + transactions.length + budgets.length;
+          accounts.length +
+          categories.length +
+          transactions.length +
+          budgets.length;
       var done = 0;
       void tick() => onProgress?.call(
-            SyncProgress(phase: SyncPhase.syncing, current: ++done, total: total),
-          );
+        SyncProgress(phase: SyncPhase.syncing, current: ++done, total: total),
+      );
       if (total > 0) {
-        onProgress?.call(SyncProgress(phase: SyncPhase.syncing, current: 0, total: total));
+        onProgress?.call(
+          SyncProgress(phase: SyncPhase.syncing, current: 0, total: total),
+        );
       }
 
       // FK-safe order: accounts/categories before transactions before
@@ -187,7 +298,11 @@ class SyncEngine {
     final pending = await _outbox.findPendingAccount(json['id'] as String);
     if (pending != null && pending.version != json['version']) {
       await _outbox.writeConflict(
-          SyncTableName.accounts, pending.id, _accountToFullJson(pending), json);
+        SyncTableName.accounts,
+        pending.id,
+        _accountToFullJson(pending),
+        json,
+      );
       return;
     }
     await _outbox.upsertAccountFromServer(json);
@@ -197,7 +312,11 @@ class SyncEngine {
     final pending = await _outbox.findPendingCategory(json['id'] as String);
     if (pending != null && pending.version != json['version']) {
       await _outbox.writeConflict(
-          SyncTableName.categories, pending.id, _categoryToFullJson(pending), json);
+        SyncTableName.categories,
+        pending.id,
+        _categoryToFullJson(pending),
+        json,
+      );
       return;
     }
     await _outbox.upsertCategoryFromServer(json);
@@ -207,7 +326,11 @@ class SyncEngine {
     final pending = await _outbox.findPendingTransaction(json['id'] as String);
     if (pending != null && pending.version != json['version']) {
       await _outbox.writeConflict(
-          SyncTableName.transactions, pending.id, _transactionToFullJson(pending), json);
+        SyncTableName.transactions,
+        pending.id,
+        _transactionToFullJson(pending),
+        json,
+      );
       return;
     }
     await _outbox.upsertTransactionFromServer(json);
@@ -217,7 +340,11 @@ class SyncEngine {
     final pending = await _outbox.findPendingBudget(json['id'] as String);
     if (pending != null && pending.version != json['version']) {
       await _outbox.writeConflict(
-          SyncTableName.budgets, pending.id, _budgetToFullJson(pending), json);
+        SyncTableName.budgets,
+        pending.id,
+        _budgetToFullJson(pending),
+        json,
+      );
       return;
     }
     await _outbox.upsertBudgetFromServer(json);
@@ -232,54 +359,64 @@ List<Map<String, dynamic>> _list(Object? value) =>
 /// set by the sync engine itself (repositories never touch it), so a null
 /// value reliably means "created locally, never synced" — distinct from a
 /// freshly-synced row that also happens to have `version == 1`.
-int? _localBaseVersion({required String? originDeviceId, required int version}) =>
-    originDeviceId == null ? null : version;
+int? _localBaseVersion({
+  required String? originDeviceId,
+  required int version,
+}) => originDeviceId == null ? null : version;
 
 Map<String, dynamic> _accountToPushJson(Account row) => {
-      'id': row.id,
-      'localBaseVersion':
-          _localBaseVersion(originDeviceId: row.originDeviceId, version: row.version),
-      'name': row.name,
-      'type': row.type,
-      'startingBalance': row.startingBalance,
-      'archivedAt': row.archivedAt?.toUtc().toIso8601String(),
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'localBaseVersion': _localBaseVersion(
+    originDeviceId: row.originDeviceId,
+    version: row.version,
+  ),
+  'name': row.name,
+  'type': row.type,
+  'startingBalance': row.startingBalance,
+  'archivedAt': row.archivedAt?.toUtc().toIso8601String(),
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _categoryToPushJson(Category row) => {
-      'id': row.id,
-      'localBaseVersion':
-          _localBaseVersion(originDeviceId: row.originDeviceId, version: row.version),
-      'kind': row.kind,
-      'name': row.name,
-      'icon': row.icon,
-      'color': row.color,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'localBaseVersion': _localBaseVersion(
+    originDeviceId: row.originDeviceId,
+    version: row.version,
+  ),
+  'kind': row.kind,
+  'name': row.name,
+  'icon': row.icon,
+  'color': row.color,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _transactionToPushJson(Transaction row) => {
-      'id': row.id,
-      'localBaseVersion':
-          _localBaseVersion(originDeviceId: row.originDeviceId, version: row.version),
-      'type': row.type,
-      'amount': row.amount,
-      'occurredAt': row.occurredAt.toUtc().toIso8601String(),
-      'accountId': row.accountId,
-      'transferToAccountId': row.transferToAccountId,
-      'categoryId': row.categoryId,
-      'note': row.note,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'localBaseVersion': _localBaseVersion(
+    originDeviceId: row.originDeviceId,
+    version: row.version,
+  ),
+  'type': row.type,
+  'amount': row.amount,
+  'occurredAt': row.occurredAt.toUtc().toIso8601String(),
+  'accountId': row.accountId,
+  'transferToAccountId': row.transferToAccountId,
+  'categoryId': row.categoryId,
+  'note': row.note,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _budgetToPushJson(Budget row) => {
-      'id': row.id,
-      'localBaseVersion':
-          _localBaseVersion(originDeviceId: row.originDeviceId, version: row.version),
-      'categoryId': row.categoryId,
-      'periodMonth': row.periodMonth.toUtc().toIso8601String(),
-      'limitAmount': row.limitAmount,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'localBaseVersion': _localBaseVersion(
+    originDeviceId: row.originDeviceId,
+    version: row.version,
+  ),
+  'categoryId': row.categoryId,
+  'periodMonth': row.periodMonth.toUtc().toIso8601String(),
+  'limitAmount': row.limitAmount,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 // ---- "full" (server-row-shaped) JSON, for conflict records --------------
 //
@@ -292,55 +429,55 @@ Map<String, dynamic> _budgetToPushJson(Budget row) => {
 // backend/src/modules/sync/sync.routes.ts).
 
 Map<String, dynamic> _accountToFullJson(Account row) => {
-      'id': row.id,
-      'userId': row.userId,
-      'name': row.name,
-      'type': row.type,
-      'startingBalance': row.startingBalance,
-      'archivedAt': row.archivedAt?.toUtc().toIso8601String(),
-      'updatedAt': row.updatedAt.toUtc().toIso8601String(),
-      'version': row.version,
-      'originDeviceId': row.originDeviceId,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'userId': row.userId,
+  'name': row.name,
+  'type': row.type,
+  'startingBalance': row.startingBalance,
+  'archivedAt': row.archivedAt?.toUtc().toIso8601String(),
+  'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+  'version': row.version,
+  'originDeviceId': row.originDeviceId,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _categoryToFullJson(Category row) => {
-      'id': row.id,
-      'userId': row.userId,
-      'kind': row.kind,
-      'name': row.name,
-      'icon': row.icon,
-      'color': row.color,
-      'updatedAt': row.updatedAt.toUtc().toIso8601String(),
-      'version': row.version,
-      'originDeviceId': row.originDeviceId,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'userId': row.userId,
+  'kind': row.kind,
+  'name': row.name,
+  'icon': row.icon,
+  'color': row.color,
+  'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+  'version': row.version,
+  'originDeviceId': row.originDeviceId,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _transactionToFullJson(Transaction row) => {
-      'id': row.id,
-      'userId': row.userId,
-      'type': row.type,
-      'amount': row.amount,
-      'occurredAt': row.occurredAt.toUtc().toIso8601String(),
-      'accountId': row.accountId,
-      'transferToAccountId': row.transferToAccountId,
-      'categoryId': row.categoryId,
-      'note': row.note,
-      'updatedAt': row.updatedAt.toUtc().toIso8601String(),
-      'version': row.version,
-      'originDeviceId': row.originDeviceId,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'userId': row.userId,
+  'type': row.type,
+  'amount': row.amount,
+  'occurredAt': row.occurredAt.toUtc().toIso8601String(),
+  'accountId': row.accountId,
+  'transferToAccountId': row.transferToAccountId,
+  'categoryId': row.categoryId,
+  'note': row.note,
+  'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+  'version': row.version,
+  'originDeviceId': row.originDeviceId,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};
 
 Map<String, dynamic> _budgetToFullJson(Budget row) => {
-      'id': row.id,
-      'userId': row.userId,
-      'categoryId': row.categoryId,
-      'periodMonth': row.periodMonth.toUtc().toIso8601String(),
-      'limitAmount': row.limitAmount,
-      'updatedAt': row.updatedAt.toUtc().toIso8601String(),
-      'version': row.version,
-      'originDeviceId': row.originDeviceId,
-      'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
-    };
+  'id': row.id,
+  'userId': row.userId,
+  'categoryId': row.categoryId,
+  'periodMonth': row.periodMonth.toUtc().toIso8601String(),
+  'limitAmount': row.limitAmount,
+  'updatedAt': row.updatedAt.toUtc().toIso8601String(),
+  'version': row.version,
+  'originDeviceId': row.originDeviceId,
+  'deletedAt': row.deletedAt?.toUtc().toIso8601String(),
+};

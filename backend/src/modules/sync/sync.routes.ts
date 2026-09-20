@@ -23,8 +23,10 @@ type RejectedRow = { id: string; reason: string };
 
 function describeRejection(e: unknown): string {
   const cause = e instanceof Error ? (e as Error & { cause?: unknown }).cause : undefined;
-  const code =
-    (cause as { code?: string } | undefined)?.code ?? (e as { code?: string } | undefined)?.code;
+  const pgErr = (cause ?? e) as
+    | { code?: string; message?: string; detail?: string }
+    | undefined;
+  const code = pgErr?.code;
   switch (code) {
     case "23503":
       return "references a row that does not exist on the server";
@@ -32,8 +34,13 @@ function describeRejection(e: unknown): string {
       return "duplicate id";
     case "22P02":
       return "malformed value";
-    default:
-      return "could not be saved";
+    default: {
+      // Unrecognized code — surface it instead of a generic message, so the
+      // next occurrence is diagnosable from the response/logs alone instead
+      // of requiring another guess-and-redeploy round trip.
+      const detail = pgErr?.detail ?? pgErr?.message ?? "unknown error";
+      return code ? `database error ${code}: ${detail}` : `error: ${detail}`;
+    }
   }
 }
 

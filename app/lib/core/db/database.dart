@@ -3,7 +3,8 @@ import 'package:uuid/uuid.dart';
 
 import '../theme/category_style.dart';
 import 'connection/unsupported.dart'
-    if (dart.library.io) 'connection/native.dart' as db_connection;
+    if (dart.library.io) 'connection/native.dart'
+    as db_connection;
 
 part 'database.g.dart';
 
@@ -62,12 +63,10 @@ class Transactions extends Table {
   TextColumn get type => text()();
   RealColumn get amount => real()();
   DateTimeColumn get occurredAt => dateTime()();
-  TextColumn get accountId =>
-      text().references(Accounts, #id)();
+  TextColumn get accountId => text().references(Accounts, #id)();
   TextColumn get transferToAccountId =>
       text().nullable().references(Accounts, #id)();
-  TextColumn get categoryId =>
-      text().nullable().references(Categories, #id)();
+  TextColumn get categoryId => text().nullable().references(Categories, #id)();
   TextColumn get note => text().nullable()();
   // set on rows created by the CSV import wizard, null otherwise; lets a
   // bad import be bulk-reverted by soft-deleting everything with the tag
@@ -85,8 +84,7 @@ class Transactions extends Table {
 class Budgets extends Table {
   TextColumn get id => text()();
   TextColumn get userId => text().withDefault(const Constant(localUserId))();
-  TextColumn get categoryId =>
-      text().references(Categories, #id)();
+  TextColumn get categoryId => text().references(Categories, #id)();
   // normalized to the first of the month
   DateTimeColumn get periodMonth => dateTime()();
   RealColumn get limitAmount => real()();
@@ -101,8 +99,8 @@ class Budgets extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {userId, categoryId, periodMonth},
-      ];
+    {userId, categoryId, periodMonth},
+  ];
 }
 
 /// Client-only — no server counterpart. Written by the sync engine
@@ -127,35 +125,64 @@ class SyncConflicts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Client-only — no server counterpart. Written by the sync engine
+/// (core/sync/sync_engine.dart) when a push hard-rejects a row outright —
+/// not a version conflict to resolve, the server refused to save it (e.g. a
+/// bad foreign key, a value it won't accept). Upserted by id so a
+/// still-broken row doesn't pile up duplicate entries across retries, and
+/// cleared the moment that row's id shows up in a later push's `accepted`
+/// list. Read by features/sync_conflicts/ alongside SyncConflicts.
+class SyncRejections extends Table {
+  TextColumn get id => text()(); // '$syncTableName:$rowId'
+  TextColumn get syncTableName => text()();
+  TextColumn get rowId => text()();
+  TextColumn get reason => text()();
+  TextColumn get localRowJson => text()();
+  DateTimeColumn get detectedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
-  tables: [Accounts, Categories, Transactions, Budgets, SyncConflicts],
+  tables: [
+    Accounts,
+    Categories,
+    Transactions,
+    Budgets,
+    SyncConflicts,
+    SyncRejections,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-      : super(executor ?? db_connection.openConnection());
+    : super(executor ?? db_connection.openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          await m.createAll();
-          await _seedCategories(this);
-        },
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.addColumn(categories, categories.color);
-            await _backfillCategoryColors(this);
-          }
-          if (from < 3) {
-            await m.addColumn(transactions, transactions.importBatchId);
-          }
-          if (from < 4) {
-            await m.createTable(syncConflicts);
-          }
-        },
-      );
+    onCreate: (m) async {
+      await m.createAll();
+      await _seedCategories(this);
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(categories, categories.color);
+        await _backfillCategoryColors(this);
+      }
+      if (from < 3) {
+        await m.addColumn(transactions, transactions.importBatchId);
+      }
+      if (from < 4) {
+        await m.createTable(syncConflicts);
+      }
+      if (from < 5) {
+        await m.createTable(syncRejections);
+      }
+    },
+  );
 }
 
 /// name -> icon key (core/theme/category_style.dart); unmatched names fall

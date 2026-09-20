@@ -8,7 +8,9 @@ import '../features/calendar/presentation/calendar_screen.dart';
 import '../features/charts/presentation/charts_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/sync_conflicts/application/sync_conflict_providers.dart';
+import '../features/sync_conflicts/application/sync_rejection_providers.dart';
 import '../features/sync_conflicts/presentation/sync_conflicts_screen.dart';
+import '../features/sync_conflicts/presentation/sync_rejections_screen.dart';
 import '../features/transactions/presentation/add_transaction_screen.dart';
 import 'sync/sync_models.dart';
 import 'sync/sync_providers.dart';
@@ -34,9 +36,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _onFabPressed() {
     switch (_index) {
       case 0:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AddTransactionScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const AddTransactionScreen()));
       case 3:
         showModalBottomSheet(
           context: context,
@@ -52,7 +54,10 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final isSyncing =
         ref.watch(syncControllerProvider).progress.phase == SyncPhase.syncing;
-    final openConflicts = ref.watch(openSyncConflictsProvider).valueOrNull ?? const [];
+    final openConflicts =
+        ref.watch(openSyncConflictsProvider).valueOrNull ?? const [];
+    final rejectionCount =
+        ref.watch(syncRejectionCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       body: Column(
@@ -71,13 +76,39 @@ class _AppShellState extends ConsumerState<AppShell> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SyncConflictsScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const SyncConflictsScreen(),
+                    ),
                   ),
                   child: const Text('Review'),
                 ),
               ],
             ),
-          Expanded(child: IndexedStack(index: _index, children: _screens)),
+          if (rejectionCount > 0)
+            MaterialBanner(
+              content: Text(
+                rejectionCount == 1
+                    ? '1 item failed to sync'
+                    : '$rejectionCount items failed to sync',
+              ),
+              leading: Icon(
+                Icons.error_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SyncRejectionsScreen(),
+                    ),
+                  ),
+                  child: const Text('Review'),
+                ),
+              ],
+            ),
+          Expanded(
+            child: IndexedStack(index: _index, children: _screens),
+          ),
         ],
       ),
       floatingActionButton: _showFab
