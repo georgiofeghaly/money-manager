@@ -12,6 +12,14 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const PULL_PAGE_LIMIT = 500;
 
+// Sentinel for "no cursor yet" (first page of a pull). Must be a valid uuid
+// literal since it's bound against a `uuid` column — Postgres validates
+// parameter types at bind time regardless of whether the OR/AND branch that
+// uses it ends up being evaluated, so "" fails before the query even runs.
+// The nil uuid sorts below every real generated uuid, so `gt(idCol, ...)`
+// behaves the same as "no cursor" should.
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
 // ---- push -------------------------------------------------------------
 //
 // Per row: no existing server row -> INSERT (version 1). Existing row whose
@@ -404,7 +412,7 @@ export const syncRoutes = new Elysia({ prefix: "/sync" })
     async ({ headers, query }) => {
       const userId = await requireAuth(headers).then((c) => c.userId);
       const since = query.since ? new Date(query.since) : new Date(0);
-      const cursorId = query.cursorId ?? "";
+      const cursorId = query.cursorId ?? NIL_UUID;
 
       const result = await withUserScope(userId, async (tx) => {
         const pages: Record<(typeof SYNC_TABLE_ORDER)[number], unknown[]> = {
