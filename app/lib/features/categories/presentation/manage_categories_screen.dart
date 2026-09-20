@@ -33,6 +33,7 @@ class ManageCategoriesScreen extends ConsumerWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'manage_categories_fab',
         onPressed: () => showModalBottomSheet(
           context: context,
           isScrollControlled: true,

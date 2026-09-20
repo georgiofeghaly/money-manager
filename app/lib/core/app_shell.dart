@@ -82,6 +82,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       floatingActionButton: _showFab
           ? FloatingActionButton(
+              heroTag: 'app_shell_fab',
               onPressed: _onFabPressed,
               child: const Icon(Icons.add),
             )

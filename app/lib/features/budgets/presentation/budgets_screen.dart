@@ -80,6 +80,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
       floatingActionButton: widget.readOnly
           ? null
           : FloatingActionButton(
+              heroTag: 'budgets_fab',
               onPressed: () {
                 final excluded = (budgetsAsync.valueOrNull ?? const <Budget>[])
                     .map((b) => b.categoryId)

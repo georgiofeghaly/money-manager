@@ -16,10 +16,13 @@ class BackendConnectionScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Backend & Sync')),
       body: switch (controller.phase) {
-        ConnectionPhase.checking =>
-          const Center(child: CircularProgressIndicator()),
+        ConnectionPhase.checking => const Center(
+          child: CircularProgressIndicator(),
+        ),
         ConnectionPhase.disconnected => const _ConnectServerForm(),
-        ConnectionPhase.connectedLoggedOut => _LoginForm(serverUrl: controller.serverUrl!),
+        ConnectionPhase.connectedLoggedOut => _LoginForm(
+          serverUrl: controller.serverUrl!,
+        ),
         ConnectionPhase.loggedIn => _ConnectedPanel(controller: controller),
       },
     );
@@ -51,8 +54,9 @@ class _ConnectServerFormState extends ConsumerState<_ConnectServerForm> {
       _connecting = true;
       _error = null;
     });
-    final error =
-        await ref.read(authControllerProvider).connectToServer(_urlController.text);
+    final error = await ref
+        .read(authControllerProvider)
+        .connectToServer(_urlController.text);
     if (!mounted) return;
     setState(() {
       _connecting = false;
@@ -66,54 +70,66 @@ class _ConnectServerFormState extends ConsumerState<_ConnectServerForm> {
       padding: const EdgeInsets.all(24),
       child: Form(
         key: _formKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.dns_outlined, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 16),
-            Text('Connect to your server', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text(
-              'Enter the address of your self-hosted Money Manager backend — '
-              'your own domain, or a local address if you\'re on the home '
-              'network or VPN.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _urlController,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Server URL',
-                hintText: 'https://money.example.com',
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.dns_outlined,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
               ),
-              validator: (v) {
-                final uri = Uri.tryParse(v ?? '');
-                if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
-                  return 'Enter a full URL, including https://';
-                }
-                return null;
-              },
-            ),
-            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Connect to your server',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ],
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _connecting ? null : _submit,
-                child: _connecting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Connect'),
+              const Text(
+                'Enter the address of your self-hosted Money Manager backend — '
+                'your own domain, or a local address if you\'re on the home '
+                'network or VPN.',
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _urlController,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                  labelText: 'Server URL',
+                  hintText: 'https://money.example.com',
+                ),
+                validator: (v) {
+                  final uri = Uri.tryParse(v ?? '');
+                  if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+                    return 'Enter a full URL, including https://';
+                  }
+                  return null;
+                },
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _connecting ? null : _submit,
+                  child: _connecting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Connect'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -150,7 +166,9 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       _submitting = true;
       _error = null;
     });
-    final error = await ref.read(authControllerProvider).login(
+    final error = await ref
+        .read(authControllerProvider)
+        .login(
           email: _emailController.text.trim(),
           password: _passwordController.text,
           deviceName: _deviceNameController.text.trim(),
@@ -168,60 +186,72 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       padding: const EdgeInsets.all(24),
       child: Form(
         key: _formKey,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.login, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 8),
-            Text(
-              widget.serverUrl,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _deviceNameController,
-              decoration: const InputDecoration(labelText: 'This device\'s name'),
-              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ],
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Log in'),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.login,
+                size: 48,
+                color: Theme.of(context).colorScheme.primary,
               ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => ref.read(authControllerProvider).disconnectServer(),
-              child: const Text('Use a different server'),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                widget.serverUrl,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email'),
+                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password'),
+                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _deviceNameController,
+                decoration: const InputDecoration(
+                  labelText: 'This device\'s name',
+                ),
+                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _submitting ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Log in'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () =>
+                    ref.read(authControllerProvider).disconnectServer(),
+                child: const Text('Use a different server'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -263,7 +293,10 @@ class _ConnectedPanel extends ConsumerWidget {
           onTap: () => ref.read(authControllerProvider).logout(),
         ),
         ListTile(
-          leading: Icon(Icons.link_off, color: Theme.of(context).colorScheme.error),
+          leading: Icon(
+            Icons.link_off,
+            color: Theme.of(context).colorScheme.error,
+          ),
           title: Text(
             'Forget this server',
             style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -272,7 +305,8 @@ class _ConnectedPanel extends ConsumerWidget {
             final confirmed = await confirmDialog(
               context,
               title: 'Forget this server?',
-              message: 'You\'ll need to re-enter the server address and log in again.',
+              message:
+                  'You\'ll need to re-enter the server address and log in again.',
               confirmLabel: 'Forget',
             );
             if (confirmed) {

@@ -12,6 +12,31 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const PULL_PAGE_LIMIT = 500;
 
+// A row rejected by the database (e.g. it references an account/category
+// that doesn't exist server-side — orphaned local data from before a wipe,
+// or a bug elsewhere) is isolated to its own SAVEPOINT via `tx.transaction`,
+// so it can't roll back every other row in the same push. Without this, one
+// permanently-broken row in a device's outbox would keep re-submitting on
+// every sync and taking the *entire* batch down with it forever, since all
+// rows share one Postgres transaction per push request.
+type RejectedRow = { id: string; reason: string };
+
+function describeRejection(e: unknown): string {
+  const cause = e instanceof Error ? (e as Error & { cause?: unknown }).cause : undefined;
+  const code =
+    (cause as { code?: string } | undefined)?.code ?? (e as { code?: string } | undefined)?.code;
+  switch (code) {
+    case "23503":
+      return "references a row that does not exist on the server";
+    case "23505":
+      return "duplicate id";
+    case "22P02":
+      return "malformed value";
+    default:
+      return "could not be saved";
+  }
+}
+
 // Sentinel for "no cursor yet" (first page of a pull). Must be a valid uuid
 // literal since it's bound against a `uuid` column — Postgres validates
 // parameter types at bind time regardless of whether the OR/AND branch that
@@ -42,54 +67,61 @@ async function pushAccounts(
 ) {
   const accepted: (typeof accounts.$inferSelect)[] = [];
   const conflicts: (typeof accounts.$inferSelect)[] = [];
+  const rejected: RejectedRow[] = [];
   for (const row of rows) {
-    const [existing] = await tx
-      .select()
-      .from(accounts)
-      .where(and(eq(accounts.id, row.id), eq(accounts.userId, userId)));
+    try {
+      await tx.transaction(async (stx) => {
+        const [existing] = await stx
+          .select()
+          .from(accounts)
+          .where(and(eq(accounts.id, row.id), eq(accounts.userId, userId)));
 
-    if (!existing) {
-      const [inserted] = await tx
-        .insert(accounts)
-        .values({
-          id: row.id,
-          userId,
-          name: row.name,
-          type: row.type,
-          startingBalance: row.startingBalance,
-          archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
-          deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-          updatedAt: new Date(),
-          version: 1,
-          originDeviceId: deviceId,
-        })
-        .returning();
-      if (inserted) accepted.push(inserted);
-      continue;
+        if (!existing) {
+          const [inserted] = await stx
+            .insert(accounts)
+            .values({
+              id: row.id,
+              userId,
+              name: row.name,
+              type: row.type,
+              startingBalance: row.startingBalance,
+              archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+              deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+              updatedAt: new Date(),
+              version: 1,
+              originDeviceId: deviceId,
+            })
+            .returning();
+          if (inserted) accepted.push(inserted);
+          return;
+        }
+
+        if (existing.version !== row.localBaseVersion) {
+          conflicts.push(existing);
+          return;
+        }
+
+        const [updated] = await stx
+          .update(accounts)
+          .set({
+            name: row.name,
+            type: row.type,
+            startingBalance: row.startingBalance,
+            archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+            deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+            updatedAt: new Date(),
+            version: existing.version + 1,
+            originDeviceId: deviceId,
+          })
+          .where(eq(accounts.id, row.id))
+          .returning();
+        if (updated) accepted.push(updated);
+      });
+    } catch (e) {
+      rejected.push({ id: row.id, reason: describeRejection(e) });
     }
-
-    if (existing.version !== row.localBaseVersion) {
-      conflicts.push(existing);
-      continue;
-    }
-
-    const [updated] = await tx
-      .update(accounts)
-      .set({
-        name: row.name,
-        type: row.type,
-        startingBalance: row.startingBalance,
-        archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
-        deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-        updatedAt: new Date(),
-        version: existing.version + 1,
-        originDeviceId: deviceId,
-      })
-      .where(eq(accounts.id, row.id))
-      .returning();
-    if (updated) accepted.push(updated);
   }
-  return { accepted, conflicts };
+  return { accepted, conflicts, rejected };
 }
 
 async function pushCategories(
@@ -100,55 +132,62 @@ async function pushCategories(
 ) {
   const accepted: (typeof categories.$inferSelect)[] = [];
   const conflicts: (typeof categories.$inferSelect)[] = [];
+  const rejected: RejectedRow[] = [];
   for (const row of rows) {
-    // Only ever operates on this user's own categories — global seed
-    // categories (userId IS NULL) are never pushed/edited by a client.
-    const [existing] = await tx
-      .select()
-      .from(categories)
-      .where(and(eq(categories.id, row.id), eq(categories.userId, userId)));
+    try {
+      await tx.transaction(async (stx) => {
+        // Only ever operates on this user's own categories — global seed
+        // categories (userId IS NULL) are never pushed/edited by a client.
+        const [existing] = await stx
+          .select()
+          .from(categories)
+          .where(and(eq(categories.id, row.id), eq(categories.userId, userId)));
 
-    if (!existing) {
-      const [inserted] = await tx
-        .insert(categories)
-        .values({
-          id: row.id,
-          userId,
-          kind: row.kind,
-          name: row.name,
-          icon: row.icon ?? null,
-          color: row.color ?? null,
-          deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-          updatedAt: new Date(),
-          version: 1,
-          originDeviceId: deviceId,
-        })
-        .returning();
-      if (inserted) accepted.push(inserted);
-      continue;
+        if (!existing) {
+          const [inserted] = await stx
+            .insert(categories)
+            .values({
+              id: row.id,
+              userId,
+              kind: row.kind,
+              name: row.name,
+              icon: row.icon ?? null,
+              color: row.color ?? null,
+              deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+              updatedAt: new Date(),
+              version: 1,
+              originDeviceId: deviceId,
+            })
+            .returning();
+          if (inserted) accepted.push(inserted);
+          return;
+        }
+
+        if (existing.version !== row.localBaseVersion) {
+          conflicts.push(existing);
+          return;
+        }
+
+        const [updated] = await stx
+          .update(categories)
+          .set({
+            name: row.name,
+            icon: row.icon ?? null,
+            color: row.color ?? null,
+            deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+            updatedAt: new Date(),
+            version: existing.version + 1,
+            originDeviceId: deviceId,
+          })
+          .where(eq(categories.id, row.id))
+          .returning();
+        if (updated) accepted.push(updated);
+      });
+    } catch (e) {
+      rejected.push({ id: row.id, reason: describeRejection(e) });
     }
-
-    if (existing.version !== row.localBaseVersion) {
-      conflicts.push(existing);
-      continue;
-    }
-
-    const [updated] = await tx
-      .update(categories)
-      .set({
-        name: row.name,
-        icon: row.icon ?? null,
-        color: row.color ?? null,
-        deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-        updatedAt: new Date(),
-        version: existing.version + 1,
-        originDeviceId: deviceId,
-      })
-      .where(eq(categories.id, row.id))
-      .returning();
-    if (updated) accepted.push(updated);
   }
-  return { accepted, conflicts };
+  return { accepted, conflicts, rejected };
 }
 
 async function pushTransactions(
@@ -159,60 +198,67 @@ async function pushTransactions(
 ) {
   const accepted: (typeof transactions.$inferSelect)[] = [];
   const conflicts: (typeof transactions.$inferSelect)[] = [];
+  const rejected: RejectedRow[] = [];
   for (const row of rows) {
-    const [existing] = await tx
-      .select()
-      .from(transactions)
-      .where(and(eq(transactions.id, row.id), eq(transactions.userId, userId)));
+    try {
+      await tx.transaction(async (stx) => {
+        const [existing] = await stx
+          .select()
+          .from(transactions)
+          .where(and(eq(transactions.id, row.id), eq(transactions.userId, userId)));
 
-    if (!existing) {
-      const [inserted] = await tx
-        .insert(transactions)
-        .values({
-          id: row.id,
-          userId,
-          type: row.type,
-          amount: row.amount,
-          occurredAt: new Date(row.occurredAt),
-          accountId: row.accountId,
-          transferToAccountId: row.transferToAccountId ?? null,
-          categoryId: row.categoryId ?? null,
-          note: row.note ?? null,
-          deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-          updatedAt: new Date(),
-          version: 1,
-          originDeviceId: deviceId,
-        })
-        .returning();
-      if (inserted) accepted.push(inserted);
-      continue;
+        if (!existing) {
+          const [inserted] = await stx
+            .insert(transactions)
+            .values({
+              id: row.id,
+              userId,
+              type: row.type,
+              amount: row.amount,
+              occurredAt: new Date(row.occurredAt),
+              accountId: row.accountId,
+              transferToAccountId: row.transferToAccountId ?? null,
+              categoryId: row.categoryId ?? null,
+              note: row.note ?? null,
+              deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+              updatedAt: new Date(),
+              version: 1,
+              originDeviceId: deviceId,
+            })
+            .returning();
+          if (inserted) accepted.push(inserted);
+          return;
+        }
+
+        if (existing.version !== row.localBaseVersion) {
+          conflicts.push(existing);
+          return;
+        }
+
+        const [updated] = await stx
+          .update(transactions)
+          .set({
+            type: row.type,
+            amount: row.amount,
+            occurredAt: new Date(row.occurredAt),
+            accountId: row.accountId,
+            transferToAccountId: row.transferToAccountId ?? null,
+            categoryId: row.categoryId ?? null,
+            note: row.note ?? null,
+            deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+            updatedAt: new Date(),
+            version: existing.version + 1,
+            originDeviceId: deviceId,
+          })
+          .where(eq(transactions.id, row.id))
+          .returning();
+        if (updated) accepted.push(updated);
+      });
+    } catch (e) {
+      rejected.push({ id: row.id, reason: describeRejection(e) });
     }
-
-    if (existing.version !== row.localBaseVersion) {
-      conflicts.push(existing);
-      continue;
-    }
-
-    const [updated] = await tx
-      .update(transactions)
-      .set({
-        type: row.type,
-        amount: row.amount,
-        occurredAt: new Date(row.occurredAt),
-        accountId: row.accountId,
-        transferToAccountId: row.transferToAccountId ?? null,
-        categoryId: row.categoryId ?? null,
-        note: row.note ?? null,
-        deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-        updatedAt: new Date(),
-        version: existing.version + 1,
-        originDeviceId: deviceId,
-      })
-      .where(eq(transactions.id, row.id))
-      .returning();
-    if (updated) accepted.push(updated);
   }
-  return { accepted, conflicts };
+  return { accepted, conflicts, rejected };
 }
 
 async function pushBudgets(
@@ -223,52 +269,59 @@ async function pushBudgets(
 ) {
   const accepted: (typeof budgets.$inferSelect)[] = [];
   const conflicts: (typeof budgets.$inferSelect)[] = [];
+  const rejected: RejectedRow[] = [];
   for (const row of rows) {
-    const [existing] = await tx
-      .select()
-      .from(budgets)
-      .where(and(eq(budgets.id, row.id), eq(budgets.userId, userId)));
+    try {
+      await tx.transaction(async (stx) => {
+        const [existing] = await stx
+          .select()
+          .from(budgets)
+          .where(and(eq(budgets.id, row.id), eq(budgets.userId, userId)));
 
-    if (!existing) {
-      const [inserted] = await tx
-        .insert(budgets)
-        .values({
-          id: row.id,
-          userId,
-          categoryId: row.categoryId,
-          periodMonth: new Date(row.periodMonth),
-          limitAmount: row.limitAmount,
-          deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-          updatedAt: new Date(),
-          version: 1,
-          originDeviceId: deviceId,
-        })
-        .returning();
-      if (inserted) accepted.push(inserted);
-      continue;
+        if (!existing) {
+          const [inserted] = await stx
+            .insert(budgets)
+            .values({
+              id: row.id,
+              userId,
+              categoryId: row.categoryId,
+              periodMonth: new Date(row.periodMonth),
+              limitAmount: row.limitAmount,
+              deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+              updatedAt: new Date(),
+              version: 1,
+              originDeviceId: deviceId,
+            })
+            .returning();
+          if (inserted) accepted.push(inserted);
+          return;
+        }
+
+        if (existing.version !== row.localBaseVersion) {
+          conflicts.push(existing);
+          return;
+        }
+
+        const [updated] = await stx
+          .update(budgets)
+          .set({
+            categoryId: row.categoryId,
+            periodMonth: new Date(row.periodMonth),
+            limitAmount: row.limitAmount,
+            deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
+            updatedAt: new Date(),
+            version: existing.version + 1,
+            originDeviceId: deviceId,
+          })
+          .where(eq(budgets.id, row.id))
+          .returning();
+        if (updated) accepted.push(updated);
+      });
+    } catch (e) {
+      rejected.push({ id: row.id, reason: describeRejection(e) });
     }
-
-    if (existing.version !== row.localBaseVersion) {
-      conflicts.push(existing);
-      continue;
-    }
-
-    const [updated] = await tx
-      .update(budgets)
-      .set({
-        categoryId: row.categoryId,
-        periodMonth: new Date(row.periodMonth),
-        limitAmount: row.limitAmount,
-        deletedAt: row.deletedAt ? new Date(row.deletedAt) : null,
-        updatedAt: new Date(),
-        version: existing.version + 1,
-        originDeviceId: deviceId,
-      })
-      .where(eq(budgets.id, row.id))
-      .returning();
-    if (updated) accepted.push(updated);
   }
-  return { accepted, conflicts };
+  return { accepted, conflicts, rejected };
 }
 
 // ---- pull ---------------------------------------------------------------
@@ -373,12 +426,36 @@ export const syncRoutes = new Elysia({ prefix: "/sync" })
           transactionsResult.conflicts.length > 0 ||
           budgetsResult.conflicts.length > 0;
 
+        const rejectedCount =
+          accountsResult.rejected.length +
+          categoriesResult.rejected.length +
+          transactionsResult.rejected.length +
+          budgetsResult.rejected.length;
+
+        if (rejectedCount > 0) {
+          // A row-level failure (e.g. an orphaned foreign key from stale
+          // local data) is isolated to its own SAVEPOINT by each push*
+          // function above, so it never blocks the rest of this push — but
+          // it's still worth surfacing in the logs since the client silently
+          // drops it otherwise.
+          console.warn(`sync push: ${rejectedCount} row(s) rejected for user ${userId}`, {
+            accounts: accountsResult.rejected,
+            categories: categoriesResult.rejected,
+            transactions: transactionsResult.rejected,
+            budgets: budgetsResult.rejected,
+          });
+        }
+
         await tx
           .update(devices)
           .set({
             lastSyncAt: new Date(),
-            lastSyncStatus: hasConflicts ? "error" : "ok",
-            lastSyncError: hasConflicts ? "Conflicts pending resolution" : null,
+            lastSyncStatus: hasConflicts || rejectedCount > 0 ? "error" : "ok",
+            lastSyncError: hasConflicts
+              ? "Conflicts pending resolution"
+              : rejectedCount > 0
+                ? `${rejectedCount} row(s) rejected`
+                : null,
           })
           .where(eq(devices.id, deviceId));
 
@@ -402,6 +479,12 @@ export const syncRoutes = new Elysia({ prefix: "/sync" })
           categories: result.categories.conflicts,
           transactions: result.transactions.conflicts,
           budgets: result.budgets.conflicts,
+        },
+        rejected: {
+          accounts: result.accounts.rejected,
+          categories: result.categories.rejected,
+          transactions: result.transactions.rejected,
+          budgets: result.budgets.rejected,
         },
       };
     },
