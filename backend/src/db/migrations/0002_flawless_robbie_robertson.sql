@@ -1,0 +1,1 @@
+ALTER TABLE "categories" ALTER COLUMN "color" SET DATA TYPE bigint;

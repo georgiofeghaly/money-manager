@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
   integer,
@@ -67,7 +68,10 @@ export const categories = pgTable("categories", {
   kind: text("kind").notNull(), // 'income' | 'expense'
   name: text("name").notNull(),
   icon: text("icon"),
-  color: integer("color"), // ARGB int, mirrors the client's Categories.color
+  // ARGB int, mirrors the client's Categories.color. bigint, not integer —
+  // Color.toARGB32() is unsigned 32-bit, so any opaque color (alpha 0xFF)
+  // exceeds Postgres's signed int4 range (max ~2.1B) and would be rejected.
+  color: bigint("color", { mode: "number" }),
   isSeed: boolean("is_seed").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   version: integer("version").notNull().default(1),

@@ -15,6 +15,13 @@
       "when": 1787486093837,
       "tag": "0001_foamy_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789896056395,
+      "tag": "0002_flawless_robbie_robertson",
+      "breakpoints": true
     }
   ]
 }

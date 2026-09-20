@@ -34,7 +34,8 @@ class Accounts extends Table {
 
 class Categories extends Table {
   TextColumn get id => text()();
-  // null = global seed category, shared by all users
+  // Always null locally — the server assigns the real owner on push
+  // regardless of what's sent, so there's nothing to set here client-side.
   TextColumn get userId => text().nullable()();
   // 'income' | 'expense'
   TextColumn get kind => text()();
@@ -201,6 +202,7 @@ Future<void> _seedCategories(AppDatabase db) async {
       color: Value(defaultColorForId(id).toARGB32()),
       isSeed: const Value(true),
       updatedAt: now,
+      syncStatus: const Value('pending'),
     );
   }
 

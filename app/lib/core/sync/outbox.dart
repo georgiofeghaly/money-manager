@@ -43,9 +43,7 @@ class Outbox {
           ..where((a) => a.syncStatus.equals('pending')))
         .get();
     final categories = await (_db.select(_db.categories)
-          // Global seed categories (userId IS NULL) are server-owned and
-          // never pushed by a client, even if somehow marked pending.
-          ..where((c) => c.syncStatus.equals('pending') & c.userId.isNotNull()))
+          ..where((c) => c.syncStatus.equals('pending')))
         .get();
     final transactions = await (_db.select(_db.transactions)
           ..where((t) => t.syncStatus.equals('pending')))
