@@ -33,6 +33,8 @@ services:
       # enables CORS for the browser-based web app only. Leave unset in
       # environments that don't deploy `web` at all.
       WEB_ORIGIN: ${WEB_ORIGIN:-}
+    ports:
+      - "3000:3000"
     networks:
       - default
       - npm-network
