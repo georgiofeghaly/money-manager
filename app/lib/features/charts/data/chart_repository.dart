@@ -20,11 +20,23 @@ class MonthlyTotal {
   final double expense;
 }
 
-class ChartRepository {
-  ChartRepository(this._db);
+abstract class ChartReader {
+  Stream<List<CategorySpending>> watchCategoryBreakdown(DateTime month);
+
+  /// Income vs. expense totals per month, for the [months] ending in and
+  /// including [through]'s month.
+  Stream<List<MonthlyTotal>> watchMonthlyTotals({
+    required DateTime through,
+    required int months,
+  });
+}
+
+class DriftChartRepository implements ChartReader {
+  DriftChartRepository(this._db);
 
   final AppDatabase _db;
 
+  @override
   Stream<List<CategorySpending>> watchCategoryBreakdown(DateTime month) {
     final start = normalizeMonth(month);
     final end = DateTime(start.year, start.month + 1, 1);
@@ -47,8 +59,7 @@ class ChartRepository {
         .toList());
   }
 
-  /// Income vs. expense totals per month, for the [months] ending in and
-  /// including [through]'s month.
+  @override
   Stream<List<MonthlyTotal>> watchMonthlyTotals({
     required DateTime through,
     required int months,

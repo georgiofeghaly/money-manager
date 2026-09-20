@@ -5,16 +5,20 @@ import 'package:intl/intl.dart';
 
 import '../../../core/db/database.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/category_style.dart';
 import '../../accounts/application/account_providers.dart';
 import '../../categories/application/category_providers.dart';
 import '../../transactions/application/transaction_providers.dart';
-import '../../transactions/presentation/add_transaction_screen.dart';
+import '../../transactions/presentation/transaction_search_screen.dart';
+import '../../transactions/presentation/transaction_tile.dart';
 
 enum _Granularity { day, week, month }
 
 class CalendarScreen extends ConsumerStatefulWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({super.key, this.readOnly = false});
+
+  /// True on the web viewer — hides search/edit affordances that assume
+  /// mutation is possible.
+  final bool readOnly;
 
   @override
   ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
@@ -129,6 +133,15 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'Search transactions',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => TransactionSearchScreen(readOnly: widget.readOnly),
+              ),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.calendar_month_outlined),
             tooltip: 'Jump to date',
             onPressed: _jumpToDate,
@@ -196,7 +209,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                           ),
                         ),
                         ...dayTransactions.map(
-                          (t) => _TransactionTile(
+                          (t) => TransactionTile(
                             transaction: t,
                             accountName: accounts
                                 .firstWhereOrNull((a) => a.id == t.accountId)
@@ -208,6 +221,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen>
                                 ?.name,
                             category: categories
                                 .firstWhereOrNull((c) => c.id == t.categoryId),
+                            readOnly: widget.readOnly,
                           ),
                         ),
                       ],
@@ -290,71 +304,6 @@ class _SummaryStat extends StatelessWidget {
           style: TextStyle(color: color, fontWeight: FontWeight.bold),
         ),
       ],
-    );
-  }
-}
-
-class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({
-    required this.transaction,
-    required this.accountName,
-    required this.transferToAccountName,
-    required this.category,
-  });
-
-  final Transaction transaction;
-  final String? accountName;
-  final String? transferToAccountName;
-  final Category? category;
-
-  @override
-  Widget build(BuildContext context) {
-    final isTransfer = transaction.type == 'transfer';
-    final color = switch (transaction.type) {
-      'income' => TransactionColors.income,
-      'expense' => TransactionColors.expense(context),
-      _ => TransactionColors.transfer(context),
-    };
-    final icon = isTransfer
-        ? Icons.swap_horiz
-        : iconForKey(category?.icon);
-    final avatarColor = isTransfer
-        ? color
-        : colorFromArgb(category?.color, category?.id ?? transaction.id);
-    final sign = switch (transaction.type) {
-      'income' => '+',
-      'expense' => '-',
-      _ => '',
-    };
-
-    final title = isTransfer
-        ? '$accountName → $transferToAccountName'
-        : (category?.name ?? 'Uncategorized');
-
-    final subtitleParts = [
-      if (!isTransfer) accountName,
-      if (transaction.note != null && transaction.note!.isNotEmpty)
-        transaction.note,
-    ].whereType<String>();
-
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: avatarColor,
-        foregroundColor: Colors.white,
-        child: Icon(icon),
-      ),
-      title: Text(title),
-      subtitle:
-          subtitleParts.isEmpty ? null : Text(subtitleParts.join(' • ')),
-      trailing: Text(
-        '$sign${transaction.amount.toStringAsFixed(2)}',
-        style: TextStyle(color: color, fontWeight: FontWeight.bold),
-      ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AddTransactionScreen(existing: transaction),
-        ),
-      ),
     );
   }
 }

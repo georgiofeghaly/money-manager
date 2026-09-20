@@ -133,6 +133,101 @@ class ApiClient {
     }
   }
 
+  /// Raw push/pull calls — the row<->JSON shape (per-table field mapping)
+  /// lives in core/sync/sync_engine.dart, this stays a thin Dio wrapper like
+  /// every other method here.
+  Future<Map<String, dynamic>> pushSync({
+    required String deviceId,
+    required Map<String, List<Map<String, dynamic>>> tables,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/sync/push',
+        data: {'deviceId': deviceId, 'tables': tables},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Sync push failed'));
+    }
+  }
+
+  Future<Map<String, dynamic>> pullSync({String? since, String? cursorId}) async {
+    try {
+      final response = await _dio.get(
+        '/sync/pull',
+        queryParameters: {
+          if (since != null) 'since': since,
+          if (cursorId != null && cursorId.isNotEmpty) 'cursorId': cursorId,
+        },
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Sync pull failed'));
+    }
+  }
+
+  /// The caller's own devices, for labeling sync conflicts with a device
+  /// name instead of a raw UUID (see features/sync_conflicts/).
+  Future<List<Map<String, dynamic>>> fetchDevices() async {
+    try {
+      final response = await _dio.get('/devices');
+      return (response.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Could not load devices'));
+    }
+  }
+
+  /// `{userId, email, displayName, isAdmin}` — used both to greet the user
+  /// and, on web, to gate the /admin route (see web/admin/).
+  Future<Map<String, dynamic>> fetchMe() async {
+    try {
+      final response = await _dio.get('/auth/me');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Could not load account info'));
+    }
+  }
+
+  /// Metadata only (sign-in/sync status) — the backend's /admin routes never
+  /// return financial fields, so there's nothing sensitive for this client
+  /// to accidentally render.
+  Future<List<Map<String, dynamic>>> fetchAdminUsers() async {
+    try {
+      final response = await _dio.get('/admin/users');
+      return (response.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Could not load users'));
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAdminUserDevices(String userId) async {
+    try {
+      final response = await _dio.get('/admin/users/$userId/devices');
+      return (response.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Could not load devices'));
+    }
+  }
+
+  /// Returns `{id, email, displayName, generatedPassword}` — the password is
+  /// shown exactly once by the caller, matching create-user.ts's CLI
+  /// convention; nothing re-fetches or re-displays it after this call.
+  Future<Map<String, dynamic>> createAdminUser({
+    required String email,
+    required String displayName,
+    bool isAdmin = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/admin/users',
+        data: {'email': email, 'displayName': displayName, 'isAdmin': isAdmin},
+      );
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw ApiException(_messageFor(e, fallback: 'Could not create user'));
+    }
+  }
+
   String _messageFor(DioException e, {required String fallback}) {
     final data = e.response?.data;
     if (data is Map && data['error'] is String) return data['error'] as String;

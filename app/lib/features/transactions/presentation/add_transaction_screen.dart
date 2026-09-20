@@ -77,7 +77,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     if (_type == 'transfer' && _transferToAccountId == null) return;
     if (_type != 'transfer' && _categoryId == null) return;
 
-    final repo = ref.read(transactionRepositoryProvider);
+    final repo = ref.read(transactionWriterProvider);
     final amount = double.parse(_amountController.text);
     final note =
         _noteController.text.trim().isEmpty ? null : _noteController.text.trim();
@@ -115,7 +115,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
       message: 'This can\'t be undone.',
     );
     if (!confirmed) return;
-    await ref.read(transactionRepositoryProvider).deleteTransaction(widget.existing!.id);
+    await ref.read(transactionWriterProvider).deleteTransaction(widget.existing!.id);
     if (mounted) Navigator.of(context).pop();
   }
 

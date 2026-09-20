@@ -5,29 +5,46 @@ import '../../../core/db/database.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../application/account_providers.dart';
 import 'add_account_sheet.dart';
+import 'archived_accounts_screen.dart';
 
 class AccountsScreen extends ConsumerWidget {
-  const AccountsScreen({super.key});
+  const AccountsScreen({super.key, this.readOnly = false});
+
+  /// True on the web viewer — hides the archive swipe action, the
+  /// archived-accounts entry point, and tap-to-edit.
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accountsAsync = ref.watch(accountsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Accounts')),
+      appBar: AppBar(
+        title: const Text('Accounts'),
+        actions: [
+          if (!readOnly)
+            IconButton(
+              icon: const Icon(Icons.inventory_2_outlined),
+              tooltip: 'Archived accounts',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ArchivedAccountsScreen()),
+              ),
+            ),
+        ],
+      ),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, st) => Center(child: Text('Error: $err')),
         data: (accounts) {
           if (accounts.isEmpty) {
-            return const Center(
-              child: Text('No accounts yet. Tap + to add one.'),
+            return Center(
+              child: Text(readOnly ? 'No accounts yet.' : 'No accounts yet. Tap + to add one.'),
             );
           }
           return ListView.builder(
             itemCount: accounts.length,
             itemBuilder: (context, index) =>
-                _AccountTile(account: accounts[index]),
+                _AccountTile(account: accounts[index], readOnly: readOnly),
           );
         },
       ),
@@ -36,9 +53,10 @@ class AccountsScreen extends ConsumerWidget {
 }
 
 class _AccountTile extends ConsumerWidget {
-  const _AccountTile({required this.account});
+  const _AccountTile({required this.account, this.readOnly = false});
 
   final Account account;
+  final bool readOnly;
 
   IconData _iconFor(String type) {
     switch (type) {
@@ -56,6 +74,38 @@ class _AccountTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final balanceAsync = ref.watch(accountBalanceProvider(account.id));
+
+    final tile = ListTile(
+      leading: CircleAvatar(child: Icon(_iconFor(account.type))),
+      title: Text(account.name),
+      subtitle: Text(account.type),
+      trailing: balanceAsync.when(
+        loading: () => const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        error: (err, st) => const Text('—'),
+        data: (balance) => Text(
+          balance.toStringAsFixed(2),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: balance < 0
+                ? Theme.of(context).colorScheme.error
+                : Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ),
+      onTap: readOnly
+          ? null
+          : () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => AddAccountSheet(existing: account),
+              ),
+    );
+
+    if (readOnly) return tile;
 
     return Dismissible(
       key: ValueKey(account.id),
@@ -78,34 +128,8 @@ class _AccountTile extends ConsumerWidget {
         confirmLabel: 'Archive',
       ),
       onDismissed: (_) =>
-          ref.read(accountRepositoryProvider).setArchived(account.id, true),
-      child: ListTile(
-        leading: CircleAvatar(child: Icon(_iconFor(account.type))),
-        title: Text(account.name),
-        subtitle: Text(account.type),
-        trailing: balanceAsync.when(
-          loading: () => const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          error: (err, st) => const Text('—'),
-          data: (balance) => Text(
-            balance.toStringAsFixed(2),
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: balance < 0
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ),
-        onTap: () => showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          builder: (_) => AddAccountSheet(existing: account),
-        ),
-      ),
+          ref.read(accountWriterProvider).setArchived(account.id, true),
+      child: tile,
     );
   }
 }

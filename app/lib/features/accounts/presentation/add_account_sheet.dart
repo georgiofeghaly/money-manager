@@ -40,7 +40,7 @@ class _AddAccountSheetState extends ConsumerState<AddAccountSheet> {
     if (!_formKey.currentState!.validate()) return;
     final name = _nameController.text.trim();
     final startingBalance = double.tryParse(_startingBalanceController.text) ?? 0;
-    final repo = ref.read(accountRepositoryProvider);
+    final repo = ref.read(accountWriterProvider);
 
     if (_isEditing) {
       await repo.updateAccount(
@@ -69,7 +69,7 @@ class _AddAccountSheetState extends ConsumerState<AddAccountSheet> {
       confirmLabel: 'Archive',
     );
     if (!confirmed) return;
-    await ref.read(accountRepositoryProvider).setArchived(widget.existing!.id, true);
+    await ref.read(accountWriterProvider).setArchived(widget.existing!.id, true);
     if (mounted) Navigator.of(context).pop();
   }
 

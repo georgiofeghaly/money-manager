@@ -17,6 +17,10 @@ class ConnectionSettings {
   static const _accessTokenKey = 'access_token';
   static const _refreshTokenKey = 'refresh_token';
   static const _userEmailKey = 'user_email';
+  static const _pullCursorSinceKey = 'sync_pull_cursor_since';
+  static const _pullCursorIdKey = 'sync_pull_cursor_id';
+  static const _lastSyncedAtKey = 'sync_last_synced_at';
+  static const _lastSyncStatusKey = 'sync_last_status';
 
   Future<String?> readServerUrl() => _storage.read(key: _serverUrlKey);
 
@@ -68,5 +72,38 @@ class ConnectionSettings {
   Future<void> clearAll() async {
     await clearSession();
     await _storage.delete(key: _serverUrlKey);
+    await _storage.delete(key: _pullCursorSinceKey);
+    await _storage.delete(key: _pullCursorIdKey);
+    await _storage.delete(key: _lastSyncedAtKey);
+    await _storage.delete(key: _lastSyncStatusKey);
   }
+
+  /// Defaults to the Unix epoch — a fresh device with no stored cursor pulls
+  /// everything from the beginning of time on its first sync.
+  Future<String> readPullCursorSince() async {
+    final stored = await _storage.read(key: _pullCursorSinceKey);
+    return stored ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true).toIso8601String();
+  }
+
+  Future<String> readPullCursorId() async =>
+      (await _storage.read(key: _pullCursorIdKey)) ?? '';
+
+  Future<void> writePullCursor({required String since, required String cursorId}) async {
+    await _storage.write(key: _pullCursorSinceKey, value: since);
+    await _storage.write(key: _pullCursorIdKey, value: cursorId);
+  }
+
+  Future<DateTime?> readLastSyncedAt() async {
+    final stored = await _storage.read(key: _lastSyncedAtKey);
+    return stored == null ? null : DateTime.parse(stored);
+  }
+
+  Future<void> writeLastSyncedAt(DateTime at) =>
+      _storage.write(key: _lastSyncedAtKey, value: at.toUtc().toIso8601String());
+
+  /// 'ok' | 'error' | null (never synced yet).
+  Future<String?> readLastSyncStatus() => _storage.read(key: _lastSyncStatusKey);
+
+  Future<void> writeLastSyncStatus(String status) =>
+      _storage.write(key: _lastSyncStatusKey, value: status);
 }

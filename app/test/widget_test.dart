@@ -8,7 +8,9 @@ import 'package:money_manager/core/db/database_provider.dart';
 import 'package:money_manager/core/sync/api_client.dart';
 import 'package:money_manager/core/sync/auth_controller.dart';
 import 'package:money_manager/core/sync/connection_settings.dart';
+import 'package:money_manager/core/sync/sync_controller.dart';
 import 'package:money_manager/core/sync/sync_providers.dart';
+import 'package:money_manager/core/sync/sync_triggers.dart';
 import 'package:money_manager/features/lock/application/lock_controller.dart';
 import 'package:money_manager/features/lock/application/lock_providers.dart';
 import 'package:money_manager/features/lock/data/biometric_auth.dart';
@@ -30,6 +32,19 @@ void main() {
             ConnectionSettings(),
             ApiClient(ConnectionSettings()),
           ),
+        ),
+        // Real SyncController._init() and ConnectivitySyncTrigger.start()
+        // both touch platform channels (flutter_secure_storage,
+        // connectivity_plus) unavailable in a widget test — same reasoning
+        // as authControllerProvider above.
+        syncControllerProvider.overrideWith(
+          (ref) => SyncController.debugIdle(
+            ref.watch(syncEngineProvider),
+            ConnectionSettings(),
+          ),
+        ),
+        connectivitySyncTriggerProvider.overrideWith(
+          (ref) => ConnectivitySyncTrigger(ref.watch(syncControllerProvider)),
         ),
       ],
     );

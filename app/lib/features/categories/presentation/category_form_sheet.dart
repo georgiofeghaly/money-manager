@@ -38,7 +38,7 @@ class _CategoryFormSheetState extends ConsumerState<CategoryFormSheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final repo = ref.read(categoryRepositoryProvider);
+    final repo = ref.read(categoryWriterProvider);
     final name = _nameController.text.trim();
 
     if (_isEditing) {
@@ -68,7 +68,7 @@ class _CategoryFormSheetState extends ConsumerState<CategoryFormSheet> {
           'transactions. Existing transactions keep it.',
     );
     if (!confirmed) return;
-    await ref.read(categoryRepositoryProvider).deleteCategory(widget.existing!.id);
+    await ref.read(categoryWriterProvider).deleteCategory(widget.existing!.id);
     if (mounted) Navigator.of(context).pop();
   }
 

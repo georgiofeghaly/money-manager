@@ -11,7 +11,11 @@ import '../data/budget_repository.dart';
 import 'budget_form_sheet.dart';
 
 class BudgetsScreen extends ConsumerStatefulWidget {
-  const BudgetsScreen({super.key});
+  const BudgetsScreen({super.key, this.readOnly = false});
+
+  /// True on the web viewer — hides the add-budget FAB, "copy last month",
+  /// and tap-to-edit.
+  final bool readOnly;
 
   @override
   ConsumerState<BudgetsScreen> createState() => _BudgetsScreenState();
@@ -54,7 +58,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
           final categories = categoriesAsync.valueOrNull ?? const [];
 
           if (budgets.isEmpty) {
-            return _EmptyBudgets(month: _month);
+            return _EmptyBudgets(month: _month, readOnly: widget.readOnly);
           }
 
           return ListView.builder(
@@ -67,31 +71,36 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 budget: budget,
                 category: category,
                 month: _month,
+                readOnly: widget.readOnly,
               );
             },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          final excluded =
-              (budgetsAsync.valueOrNull ?? const <Budget>[]).map((b) => b.categoryId).toSet();
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            builder: (_) =>
-                BudgetFormSheet(month: _month, excludedCategoryIds: excluded),
-          );
-        },
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: widget.readOnly
+          ? null
+          : FloatingActionButton(
+              onPressed: () {
+                final excluded = (budgetsAsync.valueOrNull ?? const <Budget>[])
+                    .map((b) => b.categoryId)
+                    .toSet();
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) =>
+                      BudgetFormSheet(month: _month, excludedCategoryIds: excluded),
+                );
+              },
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }
 
 class _EmptyBudgets extends ConsumerWidget {
-  const _EmptyBudgets({required this.month});
+  const _EmptyBudgets({required this.month, this.readOnly = false});
   final DateTime month;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -104,11 +113,11 @@ class _EmptyBudgets extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('No budgets set for this month.'),
-          if (hasPrevious) ...[
+          if (hasPrevious && !readOnly) ...[
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: () async {
-                await ref.read(budgetRepositoryProvider).copyFromPreviousMonth(month);
+                await ref.read(budgetWriterProvider).copyFromPreviousMonth(month);
               },
               child: const Text('Copy last month\'s budgets'),
             ),
@@ -124,11 +133,13 @@ class _BudgetTile extends ConsumerWidget {
     required this.budget,
     required this.category,
     required this.month,
+    this.readOnly = false,
   });
 
   final Budget budget;
   final Category? category;
   final DateTime month;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -179,15 +190,17 @@ class _BudgetTile extends ConsumerWidget {
         },
       ),
       isThreeLine: true,
-      onTap: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => BudgetFormSheet(
-          month: month,
-          existing: budget,
-          existingCategory: category,
-        ),
-      ),
+      onTap: readOnly
+          ? null
+          : () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => BudgetFormSheet(
+                  month: month,
+                  existing: budget,
+                  existingCategory: category,
+                ),
+              ),
     );
   }
 }

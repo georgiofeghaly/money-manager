@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sync/auth_controller.dart';
+import '../../../core/sync/sync_providers.dart';
 import '../application/lock_controller.dart';
 import '../application/lock_providers.dart';
 import 'lock_screen.dart';
@@ -40,6 +44,12 @@ class _LockGateState extends ConsumerState<LockGate> with WidgetsBindingObserver
         controller.onAppPaused();
       case AppLifecycleState.resumed:
         controller.onAppResumed();
+        // Piggybacks on this observer rather than registering a second one
+        // (see app/DESIGN.md — LockGate is the app's one lifecycle
+        // observer). Only meaningful once logged in.
+        if (ref.read(authControllerProvider).phase == ConnectionPhase.loggedIn) {
+          unawaited(ref.read(syncControllerProvider).syncOnResume());
+        }
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         break;

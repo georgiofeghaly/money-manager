@@ -50,7 +50,7 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_categoryId == null) return;
-    await ref.read(budgetRepositoryProvider).upsertBudget(
+    await ref.read(budgetWriterProvider).upsertBudget(
           categoryId: _categoryId!,
           month: widget.month,
           limitAmount: double.parse(_limitController.text),
@@ -66,7 +66,7 @@ class _BudgetFormSheetState extends ConsumerState<BudgetFormSheet> {
           'The budget for "${widget.existingCategory?.name ?? 'this category'}" this month will be removed.',
     );
     if (!confirmed) return;
-    await ref.read(budgetRepositoryProvider).deleteBudget(widget.existing!.id);
+    await ref.read(budgetWriterProvider).deleteBudget(widget.existing!.id);
     if (mounted) Navigator.of(context).pop();
   }
 

@@ -1,10 +1,14 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/database_provider.dart';
+import '../../../web/data/api_chart_repository.dart';
+import '../../../web/data/web_data_providers.dart';
 import '../data/chart_repository.dart';
 
-final chartRepositoryProvider = Provider<ChartRepository>((ref) {
-  return ChartRepository(ref.watch(databaseProvider));
+final chartRepositoryProvider = Provider<ChartReader>((ref) {
+  if (kIsWeb) return ApiChartRepository(ref.watch(webDataStoreProvider));
+  return DriftChartRepository(ref.watch(databaseProvider));
 });
 
 final categoryBreakdownProvider =

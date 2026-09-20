@@ -29,11 +29,40 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/money_manager
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
       PORT: 3000
-    ports:
-      # Published directly for Phase 2 local dev/testing. Phase 4 replaces
-      # this with a Caddy service as the only container touching the host
-      # network, reverse-proxying to api over the internal network.
-      - "3000:3000"
+      # Origin of the `web` service below, e.g. https://app.example.com —
+      # enables CORS for the browser-based web app only. Leave unset in
+      # environments that don't deploy `web` at all.
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
+    networks:
+      - default
+      - npm-network
+    healthcheck:
+      test: ["CMD", "bun", "-e", "await fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # Companion Flutter web app (viewer + /admin) — static build served by
+  # nginx, on its own subdomain via NPM (see app/Dockerfile.web). Never
+  # talks to Postgres directly; it calls the `api` service's REST/sync
+  # endpoints from the browser, same as the mobile app does over Dio.
+  web:
+    build:
+      context: ../app
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    networks:
+      - npm-network
+
+networks:
+  # Must already exist (created once, outside this project):
+  #   docker network create npm-network
+  # and Nginx Proxy Manager's own compose file must also join it, so NPM
+  # can reach this container as http://api:3000. No port is published to
+  # the host at all — NPM is the only thing that can reach the api.
+  npm-network:
+    external: true
 
 volumes:
   pgdata:

@@ -4,7 +4,7 @@
  * flow (see app/DESIGN.md-equivalent notes in backend/README.md).
  *
  * Usage:
- *   bun run src/scripts/create-user.ts --email you@example.com --name "Gio" [--password "..."]
+ *   bun run src/scripts/create-user.ts --email you@example.com --name "Gio" [--password "..."] [--admin]
  *
  * If --password is omitted, a random one is generated and printed once —
  * it is never stored in plaintext or logged anywhere else.
@@ -19,8 +19,17 @@ function parseArgs(argv: string[]): Record<string, string | undefined> {
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (token?.startsWith("--")) {
-      args[token.slice(2)] = argv[i + 1];
-      i++;
+      const key = token.slice(2);
+      const next = argv[i + 1];
+      // A flag followed by another --flag (or nothing) is a boolean switch
+      // (e.g. --admin), not a --key value pair — don't consume `next` as
+      // its value in that case.
+      if (next === undefined || next.startsWith("--")) {
+        args[key] = "true";
+      } else {
+        args[key] = next;
+        i++;
+      }
     }
   }
   return args;
@@ -30,7 +39,9 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const email = args.email;
   if (!email) {
-    console.error("Usage: --email <email> [--name <display name>] [--password <password>]");
+    console.error(
+      "Usage: --email <email> [--name <display name>] [--password <password>] [--admin]",
+    );
     process.exit(1);
   }
 
@@ -43,6 +54,7 @@ async function main() {
       email,
       passwordHash,
       displayName: args.name,
+      isAdmin: args.admin === "true",
     })
     .returning({ id: users.id, email: users.email });
 

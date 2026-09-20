@@ -1,0 +1,15 @@
+# Multi-stage build for the companion Flutter web app (read-only viewer at
+# /login + /, admin panel at /admin). Builds lib/main_web.dart — a separate
+# entrypoint from the mobile app's lib/main.dart, which this image never
+# touches. See app/lib/web/ for the web-only source and app/DESIGN.md for
+# the shared theme/widgets this reuses.
+FROM ghcr.io/cirruslabs/flutter:stable AS build
+WORKDIR /app
+COPY . .
+RUN flutter pub get
+RUN flutter build web --release -t lib/main_web.dart
+
+FROM nginx:alpine
+COPY --from=build /app/build/web /usr/share/nginx/html
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

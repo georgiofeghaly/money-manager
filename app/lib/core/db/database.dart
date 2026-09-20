@@ -1,12 +1,9 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../theme/category_style.dart';
+import 'connection/unsupported.dart'
+    if (dart.library.io) 'connection/native.dart' as db_connection;
 
 part 'database.g.dart';
 
@@ -71,6 +68,9 @@ class Transactions extends Table {
   TextColumn get categoryId =>
       text().nullable().references(Categories, #id)();
   TextColumn get note => text().nullable()();
+  // set on rows created by the CSV import wizard, null otherwise; lets a
+  // bad import be bulk-reverted by soft-deleting everything with the tag
+  TextColumn get importBatchId => text().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(1))();
   TextColumn get originDeviceId => text().nullable()();
@@ -104,12 +104,37 @@ class Budgets extends Table {
       ];
 }
 
-@DriftDatabase(tables: [Accounts, Categories, Transactions, Budgets])
-class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
+/// Client-only — no server counterpart. Written by the sync engine
+/// (core/sync/sync_engine.dart) when a push is rejected as a conflict or a
+/// pull would clobber a locally-pending row; read by
+/// features/sync_conflicts/ for the resolution UI. Rows are JSON blobs
+/// rather than typed columns because the four source tables have different
+/// shapes and this table never needs to be queried by business field.
+class SyncConflicts extends Table {
+  TextColumn get id => text()();
+  // One of the SYNC_TABLE_ORDER names ('accounts'|'categories'|'transactions'|'budgets').
+  // Named syncTableName, not tableName — that name collides with Drift's
+  // own Table.tableName getter.
+  TextColumn get syncTableName => text()();
+  TextColumn get rowId => text()();
+  TextColumn get localRowJson => text()();
+  TextColumn get serverRowJson => text()();
+  DateTimeColumn get detectedAt => dateTime()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
 
   @override
-  int get schemaVersion => 2;
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(
+  tables: [Accounts, Categories, Transactions, Budgets, SyncConflicts],
+)
+class AppDatabase extends _$AppDatabase {
+  AppDatabase([QueryExecutor? executor])
+      : super(executor ?? db_connection.openConnection());
+
+  @override
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -121,6 +146,12 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await m.addColumn(categories, categories.color);
             await _backfillCategoryColors(this);
+          }
+          if (from < 3) {
+            await m.addColumn(transactions, transactions.importBatchId);
+          }
+          if (from < 4) {
+            await m.createTable(syncConflicts);
           }
         },
       );
@@ -191,13 +222,5 @@ Future<void> _backfillCategoryColors(AppDatabase db) async {
         where: (c) => c.id.equals(row.id),
       );
     }
-  });
-}
-
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'money_manager.sqlite'));
-    return NativeDatabase.createInBackground(file);
   });
 }

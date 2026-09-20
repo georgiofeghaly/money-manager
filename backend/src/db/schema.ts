@@ -16,6 +16,10 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   isActive: boolean("is_active").notNull().default(true),
+  // Grants access to the /admin/* routes (admin.routes.ts). Checked via a
+  // DB lookup on every admin request, never trusted from the JWT, since
+  // there's no token-invalidation path if admin status is later revoked.
+  isAdmin: boolean("is_admin").notNull().default(false),
 });
 
 export const devices = pgTable("devices", {
@@ -28,6 +32,12 @@ export const devices = pgTable("devices", {
   refreshTokenHash: text("refresh_token_hash").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // Updated by POST /sync/push on completion — surfaced in the admin panel
+  // alongside lastSeenAt (last sign-in), so "last sync" is a distinct
+  // signal from "last login".
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastSyncStatus: text("last_sync_status"), // 'ok' | 'error'
+  lastSyncError: text("last_sync_error"),
 });
 
 // Every syncable table below shares the same sync-metadata columns

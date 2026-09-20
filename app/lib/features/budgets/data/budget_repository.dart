@@ -7,11 +7,33 @@ const _uuid = Uuid();
 
 DateTime normalizeMonth(DateTime d) => DateTime(d.year, d.month, 1);
 
-class BudgetRepository {
-  BudgetRepository(this._db);
+abstract class BudgetReader {
+  Stream<List<Budget>> watchBudgetsForMonth(DateTime month);
+
+  /// Sum of that category's expenses within [month], for the progress bar.
+  Stream<double> watchSpent(String categoryId, DateTime month);
+}
+
+abstract class BudgetWriter {
+  Future<void> upsertBudget({
+    required String categoryId,
+    required DateTime month,
+    required double limitAmount,
+  });
+
+  Future<void> deleteBudget(String id);
+
+  /// Copies every budget from the month before [month] into [month], skipping
+  /// categories that already have a budget set for [month].
+  Future<void> copyFromPreviousMonth(DateTime month);
+}
+
+class DriftBudgetRepository implements BudgetReader, BudgetWriter {
+  DriftBudgetRepository(this._db);
 
   final AppDatabase _db;
 
+  @override
   Stream<List<Budget>> watchBudgetsForMonth(DateTime month) {
     final normalized = normalizeMonth(month);
     return (_db.select(_db.budgets)
@@ -21,7 +43,7 @@ class BudgetRepository {
         .watch();
   }
 
-  /// Sum of that category's expenses within [month], for the progress bar.
+  @override
   Stream<double> watchSpent(String categoryId, DateTime month) {
     final start = normalizeMonth(month);
     final end = DateTime(start.year, start.month + 1, 1);
@@ -49,6 +71,7 @@ class BudgetRepository {
   /// one already exists — looked up explicitly rather than relying on a SQL
   /// upsert, since the conflict target is the (category, month) unique key,
   /// not the primary key (a fresh UUID is generated for every insert).
+  @override
   Future<void> upsertBudget({
     required String categoryId,
     required DateTime month,
@@ -68,6 +91,7 @@ class BudgetRepository {
           .write(BudgetsCompanion(
         limitAmount: Value(limitAmount),
         updatedAt: Value(now),
+        syncStatus: const Value('pending'),
       ));
     } else {
       await _db.into(_db.budgets).insert(BudgetsCompanion.insert(
@@ -76,18 +100,22 @@ class BudgetRepository {
             periodMonth: normalized,
             limitAmount: limitAmount,
             updatedAt: now,
+            syncStatus: const Value('pending'),
           ));
     }
   }
 
+  @override
   Future<void> deleteBudget(String id) {
     return (_db.update(_db.budgets)..where((b) => b.id.equals(id))).write(
-      BudgetsCompanion(deletedAt: Value(DateTime.now())),
+      BudgetsCompanion(
+        deletedAt: Value(DateTime.now()),
+        syncStatus: const Value('pending'),
+      ),
     );
   }
 
-  /// Copies every budget from the month before [month] into [month], skipping
-  /// categories that already have a budget set for [month].
+  @override
   Future<void> copyFromPreviousMonth(DateTime month) async {
     final target = normalizeMonth(month);
     final previous = DateTime(target.year, target.month - 1, 1);
@@ -111,6 +139,7 @@ class BudgetRepository {
               periodMonth: target,
               limitAmount: b.limitAmount,
               updatedAt: now,
+              syncStatus: const Value('pending'),
             ))
         .toList();
 

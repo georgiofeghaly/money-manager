@@ -124,4 +124,21 @@ export const authRoutes = new Elysia({ prefix: "/auth" })
       return { ok: true };
     },
     { body: changePasswordBody },
-  );
+  )
+  // Used by the web app to decide whether to show /admin at all — the JWT
+  // itself doesn't carry isAdmin, so this is the one place a client can
+  // find out.
+  .get("/me", async ({ headers }) => {
+    const { userId } = await requireAuth(headers);
+    const [user] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        isAdmin: users.isAdmin,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return user;
+  });
