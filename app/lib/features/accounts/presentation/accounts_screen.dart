@@ -42,11 +42,50 @@ class AccountsScreen extends ConsumerWidget {
             );
           }
           return ListView.builder(
-            itemCount: accounts.length,
-            itemBuilder: (context, index) =>
-                _AccountTile(account: accounts[index], readOnly: readOnly),
+            itemCount: accounts.length + 1,
+            itemBuilder: (context, index) => index == 0
+                ? const _TotalsCard()
+                : _AccountTile(account: accounts[index - 1], readOnly: readOnly),
           );
         },
+      ),
+    );
+  }
+}
+
+/// All-time money in vs. money out across every account.
+class _TotalsCard extends ConsumerWidget {
+  const _TotalsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final totals = ref.watch(moneyTotalsProvider).value;
+    final theme = Theme.of(context);
+
+    Widget column(String label, double? amount, Color color) => Expanded(
+          child: Column(
+            children: [
+              Text(label, style: theme.textTheme.labelMedium),
+              const SizedBox(height: 4),
+              Text(
+                amount?.toStringAsFixed(2) ?? '—',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold, color: color),
+              ),
+            ],
+          ),
+        );
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        child: Row(
+          children: [
+            column('Total in', totals?.totalIn, Colors.green),
+            column('Total out', totals?.totalOut, theme.colorScheme.error),
+          ],
+        ),
       ),
     );
   }

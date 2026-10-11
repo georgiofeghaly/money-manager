@@ -55,4 +55,16 @@ class ApiAccountRepository implements AccountReader {
         }
         return balance;
       });
+
+  @override
+  Stream<MoneyTotals> watchTotals() => watchDerived(_store, () {
+        var totalIn = 0.0;
+        var totalOut = 0.0;
+        for (final t in _store.transactions) {
+          if (t.deletedAt != null) continue;
+          if (t.type == 'income') totalIn += t.amount;
+          if (t.type == 'expense') totalOut += t.amount;
+        }
+        return (totalIn: totalIn, totalOut: totalOut);
+      });
 }

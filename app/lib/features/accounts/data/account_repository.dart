@@ -12,7 +12,13 @@ abstract class AccountReader {
   Stream<List<Account>> watchAllAccountsForLookup();
   Stream<List<Account>> watchArchivedAccounts();
   Stream<double> watchBalance(String accountId);
+  Stream<MoneyTotals> watchTotals();
 }
+
+/// All-time income ("in") and expense ("out") across every account,
+/// archived ones included. Transfers are excluded — they just move money
+/// between your own accounts.
+typedef MoneyTotals = ({double totalIn, double totalOut});
 
 /// Mutating surface — mobile-only. The web app never depends on this, so an
 /// API-backed reader has no way to accidentally expose a write path.
@@ -148,5 +154,23 @@ class DriftAccountRepository implements AccountReader, AccountWriter {
       readsFrom: {_db.accounts, _db.transactions},
     );
     return query.watchSingle().map((row) => row.read<double>('balance'));
+  }
+
+  @override
+  Stream<MoneyTotals> watchTotals() {
+    final query = _db.customSelect(
+      '''
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'income' THEN amount END), 0) AS total_in,
+        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount END), 0) AS total_out
+      FROM transactions
+      WHERE deleted_at IS NULL
+      ''',
+      readsFrom: {_db.transactions},
+    );
+    return query.watchSingle().map((row) => (
+          totalIn: row.read<double>('total_in'),
+          totalOut: row.read<double>('total_out'),
+        ));
   }
 }

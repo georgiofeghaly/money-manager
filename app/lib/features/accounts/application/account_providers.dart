@@ -38,3 +38,7 @@ final accountBalanceProvider =
     StreamProvider.family<double, String>((ref, accountId) {
   return ref.watch(accountRepositoryProvider).watchBalance(accountId);
 });
+
+final moneyTotalsProvider = StreamProvider<MoneyTotals>((ref) {
+  return ref.watch(accountRepositoryProvider).watchTotals();
+});
